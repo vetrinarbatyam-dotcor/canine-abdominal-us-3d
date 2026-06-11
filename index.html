@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>אולטרסאונד בטן בכלב · הדמיה תלת-מימדית | Canine Abdominal Ultrasound 3D</title>
+<style>
+  :root{
+    --bg:#070b16; --panel:rgba(14,21,38,.82); --panel-solid:#0e1526;
+    --line:#1d2942; --accent:#34d1bf; --accent2:#6aa6ff; --warn:#ffb454;
+    --txt:#e8eef9; --dim:#9fb0cc; --beam:#ffd24a;
+    --good:#43d17a; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI","Assistant",system-ui,sans-serif}
+  #app{position:fixed;inset:0}
+  canvas#scene{display:block;width:100%;height:100%}
+
+  /* ===== Top bar ===== */
+  #topbar{position:absolute;top:0;left:0;right:0;height:58px;display:flex;
+    align-items:center;justify-content:space-between;padding:0 18px;z-index:20;
+    background:linear-gradient(180deg,rgba(7,11,22,.95),rgba(7,11,22,0));pointer-events:none}
+  #topbar .title{pointer-events:auto}
+  #topbar h1{font-size:16px;font-weight:700;letter-spacing:.2px}
+  #topbar h1 small{color:var(--dim);font-weight:500;font-size:11.5px;margin-inline-start:8px}
+  .toolbtns{display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
+  .tbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer;
+    backdrop-filter:blur(8px);transition:.15s}
+  .tbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .tbtn.on{background:var(--accent);color:#04221e;border-color:var(--accent);font-weight:700}
+
+  /* ===== mode switch ===== */
+  #modes{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:18;
+    display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+    border-radius:30px;padding:4px;backdrop-filter:blur(12px)}
+  #modes .mode{font-size:12.5px;padding:6px 14px;border-radius:22px;cursor:pointer;color:var(--dim);transition:.15s}
+  #modes .mode.on{background:var(--accent2);color:#04122e;font-weight:700}
+
+  /* ===== Right: explanation window ===== */
+  #explain{position:absolute;top:66px;right:14px;width:362px;max-height:calc(100% - 210px);
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:16px 16px 14px;z-index:15;backdrop-filter:blur(14px);overflow-y:auto;
+    box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  #explain h2{font-size:16px;display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  #explain .en{color:var(--dim);font-size:12px;font-weight:500;margin-bottom:10px;direction:ltr;text-align:right}
+  .pill{display:inline-block;background:rgba(52,209,191,.14);color:var(--accent);
+    border:1px solid rgba(52,209,191,.35);border-radius:20px;padding:2px 10px;font-size:11px;margin-bottom:8px}
+  .sec{margin:11px 0;padding-top:10px;border-top:1px dashed var(--line)}
+  .sec:first-of-type{border-top:none;padding-top:2px}
+  .sec h3{font-size:12.5px;color:var(--accent2);margin-bottom:5px;display:flex;gap:6px;align-items:center}
+  .sec h3 .ic{font-size:14px}
+  .sec p, .sec li{font-size:13px;line-height:1.55;color:var(--txt)}
+  .sec ul{padding-inline-start:18px}
+  .sec .ennote{display:block;color:var(--dim);font-size:11px;direction:ltr;text-align:right;margin-top:2px}
+  .dz{display:inline-block;background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.3);
+    color:#ffd0d0;border-radius:7px;padding:3px 8px;font-size:11.5px;margin:3px 3px 0 0;cursor:default}
+  .meas{background:rgba(106,166,255,.1);border:1px solid rgba(106,166,255,.28);border-radius:9px;
+    padding:8px 10px;font-size:12.5px;line-height:1.6}
+  .meas b{color:var(--accent2)}
+  /* real-US slot (future) */
+  #realUS{margin-top:6px;border:1px dashed var(--line);border-radius:9px;height:0;overflow:hidden;
+    transition:.2s;background:#05080f;display:flex;align-items:center;justify-content:center;
+    color:var(--dim);font-size:11px;text-align:center}
+  #realUS img{width:100%;border-radius:8px;display:block}
+
+  /* level toggle */
+  .levels{display:flex;gap:5px;margin:4px 0 8px}
+  .lvl{flex:1;text-align:center;font-size:11px;padding:5px 0;border:1px solid var(--line);
+    border-radius:8px;cursor:pointer;color:var(--dim);transition:.15s}
+  .lvl.on{background:var(--accent2);color:#04122e;border-color:var(--accent2);font-weight:700}
+
+  /* ===== organ menu (left) ===== */
+  #organMenu{position:absolute;top:130px;left:14px;width:212px;max-height:calc(100% - 220px);
+    overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:8px;z-index:13;backdrop-filter:blur(12px)}
+  #organMenu .mh{font-size:11px;color:var(--accent2);margin:2px 4px 8px;font-weight:700}
+  #organMenu .oi{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt);
+    padding:7px 8px;border-radius:9px;cursor:pointer;transition:.12s;border:1px solid transparent}
+  #organMenu .oi:hover{background:var(--line)}
+  #organMenu .oi.on{background:rgba(52,209,191,.16);border-color:rgba(52,209,191,.4);color:var(--accent);font-weight:700}
+  #organMenu .oi .sw{width:12px;height:12px;border-radius:4px;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.12) inset}
+  #organMenu .oi .nm{flex:1}
+  #organMenu .oi .nn{font-size:10px;color:var(--dim);background:#0b1326;border-radius:5px;padding:1px 6px}
+
+  /* ===== 2D echo monitor ===== */
+  #monitor{position:absolute;bottom:14px;right:14px;width:300px;z-index:15;
+    background:var(--panel-solid);border:1px solid var(--line);border-radius:14px;
+    padding:10px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+  #monitor .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  #monitor .mhead span{font-size:11px;color:var(--accent);letter-spacing:1px}
+  #monitor .mhead .live{display:flex;align-items:center;gap:5px;color:var(--bad);font-size:10px}
+  #monitor .mhead .live i{width:7px;height:7px;border-radius:50%;background:var(--bad);
+    display:inline-block;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  #echoCanvas{width:100%;border-radius:8px;background:#000;display:block;border:1px solid #1a2238}
+  #monitor .cap{font-size:10.5px;color:var(--dim);text-align:center;margin-top:5px;direction:ltr}
+
+  /* ===== Bottom step navigator ===== */
+  #nav{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:18;
+    display:flex;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:40px;padding:8px 12px;backdrop-filter:blur(14px)}
+  #nav button{background:none;border:none;color:var(--txt);cursor:pointer;font-size:15px;
+    width:38px;height:38px;border-radius:50%;transition:.15s}
+  #nav button:hover{background:var(--line)}
+  #nav button:disabled{opacity:.3;cursor:default}
+  #nav .dots{display:flex;gap:5px;align-items:center}
+  #nav .dot{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.18s}
+  #nav .dot.on{background:var(--accent);transform:scale(1.4)}
+  #nav .step-label{font-size:12px;color:var(--dim);min-width:54px;text-align:center}
+  #nav .play{background:var(--accent);color:#04221e;font-weight:700;width:auto;padding:0 14px;border-radius:20px;font-size:13px}
+
+  /* ===== probe orientation badge ===== */
+  #orient{position:absolute;top:66px;left:14px;width:212px;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:11px 12px;z-index:12;backdrop-filter:blur(10px)}
+  #orient h4{font-size:12px;color:var(--accent2);margin-bottom:6px}
+  #orient .o{font-size:11.5px;color:var(--txt);line-height:1.5;margin:2px 0}
+  #orient .o b{color:var(--warn)}
+
+  /* ===== Quiz ===== */
+  #quiz{position:absolute;inset:0;background:rgba(5,8,16,.92);z-index:40;display:none;
+    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)}
+  #quiz .card{width:min(640px,94vw);max-height:90vh;overflow-y:auto;background:var(--panel-solid);
+    border:1px solid var(--line);border-radius:20px;padding:26px}
+  #quiz h2{font-size:22px;margin-bottom:4px}
+  #quiz .qsub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  #quiz .q{margin:14px 0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#0b1224}
+  #quiz .q .qt{font-size:14px;font-weight:600;margin-bottom:10px}
+  #quiz .opt{display:block;width:100%;text-align:right;background:#0e1730;border:1px solid var(--line);
+    color:var(--txt);border-radius:9px;padding:9px 12px;margin:6px 0;cursor:pointer;font-size:13px;transition:.12s}
+  #quiz .opt:hover{border-color:var(--accent2)}
+  #quiz .opt.correct{background:rgba(67,209,122,.18);border-color:var(--good)}
+  #quiz .opt.wrong{background:rgba(255,107,107,.16);border-color:var(--bad)}
+  #quiz .feedback{font-size:12px;margin-top:8px;color:var(--dim);display:none}
+  #quiz .score{font-size:16px;text-align:center;margin-top:16px;padding:14px;border-radius:12px;
+    background:rgba(52,209,191,.1);border:1px solid rgba(52,209,191,.3)}
+  #quiz .close{margin-top:16px;width:100%;background:var(--accent);color:#04221e;border:none;
+    border-radius:11px;padding:12px;font-size:15px;font-weight:700;cursor:pointer}
+
+  /* loading */
+  #load{position:absolute;inset:0;background:var(--bg);z-index:60;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px}
+  #load .ring{width:46px;height:46px;border:4px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #load p{color:var(--dim);font-size:13px}
+
+  @media(max-width:980px){
+    #explain{width:300px;font-size:12px}
+    #monitor{width:230px}
+    #organMenu,#orient{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+
+  <div id="topbar">
+    <div class="title">
+      <h1>אולטרסאונד בטן בכלב <small>Canine Abdominal Ultrasound · 3D Trainer</small></h1>
+    </div>
+    <div class="toolbtns">
+      <button class="tbtn on" id="btnBeam">📡 קרן</button>
+      <button class="tbtn" id="btnXray">🦴 שלד</button>
+      <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
+      <button class="tbtn" id="btnQuiz">🎓 חזור על הבדיקה</button>
+    </div>
+  </div>
+
+  <div id="modes">
+    <div class="mode on" data-mode="full">🔄 בדיקה מלאה</div>
+    <div class="mode" data-mode="single">🎯 תרגול אבר</div>
+    <div class="mode" data-mode="demo">▶ הדגמה</div>
+  </div>
+
+  <div id="orient">
+    <h4>מנח המתמר · Probe</h4>
+    <div class="o" id="oPos"></div>
+    <div class="o" id="oMark"></div>
+    <div class="o" id="oPlane"></div>
+  </div>
+
+  <div id="organMenu"><div class="mh">בחר איבר · Organs</div></div>
+
+  <div id="explain"><!-- filled by JS --></div>
+
+  <div id="monitor">
+    <div class="mhead">
+      <span id="mTitle">2D US</span>
+      <span class="live"><i></i>LIVE</span>
+    </div>
+    <canvas id="echoCanvas" width="280" height="220"></canvas>
+    <div class="cap" id="echoCap"></div>
+  </div>
+
+  <div id="nav">
+    <button id="prev" title="הקודם">‹</button>
+    <div class="dots" id="dots"></div>
+    <span class="step-label" id="stepLabel"></span>
+    <button id="next" title="הבא">›</button>
+    <button class="play" id="autoPlay">▶ הדגמה</button>
+  </div>
+
+  <div id="quiz"><div class="card" id="quizCard"></div></div>
+
+  <div id="load"><div class="ring"></div><p>טוען מודל תלת-מימדי…</p></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* =========================================================
+   1. SCENE
+   ========================================================= */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x070b16, 0.016);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(4.5, 4.0, 12.5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.minDistance = 4; controls.maxDistance = 24;
+controls.target.set(-1.6, -0.4, 0);
+
+// lights
+scene.add(new THREE.HemisphereLight(0x9fc6ff, 0x101826, 0.7));
+const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(6,9,7); scene.add(key);
+const rim = new THREE.DirectionalLight(0x6aa6ff, 0.9); rim.position.set(-8,3,-6); scene.add(rim);
+const fill = new THREE.PointLight(0x34d1bf, 0.5, 30); fill.position.set(0,2,6); scene.add(fill);
+
+// ground glow
+const grd = new THREE.Mesh(
+  new THREE.CircleGeometry(18,64),
+  new THREE.MeshBasicMaterial({color:0x0a1120, transparent:true, opacity:.55})
+);
+grd.rotation.x = -Math.PI/2; grd.position.y = -4.7; scene.add(grd);
+const grid = new THREE.GridHelper(34, 34, 0x16223c, 0x0e1626);
+grid.position.y = -4.69; scene.add(grid);
+
+/* =========================================================
+   2. DOG BODY (transparent) + SKELETON
+   Axes:  +X = cranial(front), -X = caudal(rear)
+          +Z = left side,      -Z = right side
+          +Y = dorsal(up),     -Y = ventral(belly)
+   The abdomen occupies roughly  X = +0.6 (diaphragm) → -5.2 (pelvis)
+   Dorsal recumbency: probe approaches the belly from ventral (-Y).
+   ========================================================= */
+const dog = new THREE.Group(); scene.add(dog);
+
+// deterministic organic noise
+function pnoise(x,y,z){
+  return (Math.sin(x*3.1+y*1.7)+Math.sin(y*2.3+z*2.9)+Math.sin(z*3.7+x*1.3))/3;
+}
+function warp(geo, amp=0.05, freq=1.6, sx=1, sy=1, sz=1){
+  const pos=geo.attributes.position, v=new THREE.Vector3();
+  for(let i=0;i<pos.count;i++){
+    v.fromBufferAttribute(pos,i); v.x*=sx; v.y*=sy; v.z*=sz;
+    const r=v.length()||1e-4, n=pnoise(v.x*freq,v.y*freq,v.z*freq)*amp;
+    v.x+=(v.x/r)*n; v.y+=(v.y/r)*n; v.z+=(v.z/r)*n;
+    pos.setXYZ(i,v.x,v.y,v.z);
+  }
+  geo.computeVertexNormals(); return geo;
+}
+
+// translucent whole-dog silhouette
+const bodyGroup = new THREE.Group(); dog.add(bodyGroup);
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color:0x9cc0ef, transparent:true, opacity:.06, roughness:.2, metalness:0,
+  transmission:.95, thickness:.8, ior:1.2, side:THREE.DoubleSide, depthWrite:false,
+  clearcoat:.3, clearcoatRoughness:.5
+});
+const outlineMat = new THREE.MeshBasicMaterial({color:0x6fa0e0, wireframe:true, transparent:true, opacity:.05, depthWrite:false});
+function glass(geo, x,y,z, rx=0,ry=0,rz=0, sx=1,sy=1,sz=1){
+  const m=new THREE.Mesh(geo, glassMat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz); m.scale.set(sx,sy,sz);
+  bodyGroup.add(m);
+  const w=new THREE.Mesh(geo, outlineMat);
+  w.position.set(x,y,z); w.rotation.set(rx,ry,rz); w.scale.set(sx,sy,sz);
+  bodyGroup.add(w); return m;
+}
+// chest (cranial) — heart/lungs live here, not the focus
+glass(new THREE.CapsuleGeometry(2.7, 2.2, 16, 28), 0.9,-0.1,0,  0,0,Math.PI/2,  1,1,0.92);
+// abdomen — the main working volume, fuller caudally
+glass(new THREE.SphereGeometry(2.75,30,24), -2.6,-0.35,0, 0,0,0, 1.55,1.05,1.02);
+// pelvis
+glass(new THREE.SphereGeometry(1.7,24,18), -5.1,-0.3,0, 0,0,0, 1.0,1.0,0.95);
+// neck + head
+glass(new THREE.CylinderGeometry(1.35,1.85,2.1,24), 4.2,0.8,0, 0,0,-Math.PI/2.6);
+glass(new THREE.SphereGeometry(1.3,28,24), 5.7,1.6,0, 0,0,0, 1.05,0.95,0.9);
+glass(new THREE.CapsuleGeometry(0.58,0.85,12,18), 6.95,1.2,0, 0,0,Math.PI/2.2, 1,1,0.9);
+// ears
+glass(new THREE.ConeGeometry(0.46,1.0,16), 5.6,2.8,0.65, 0.3,0,0.2);
+glass(new THREE.ConeGeometry(0.46,1.0,16), 5.6,2.8,-0.65, -0.3,0,0.2);
+// legs
+glass(new THREE.CapsuleGeometry(0.48,2.9,10,16), 2.7,-3.0,0.95);
+glass(new THREE.CapsuleGeometry(0.48,2.9,10,16), 2.7,-3.0,-0.95);
+glass(new THREE.CapsuleGeometry(0.55,2.8,10,16), -4.6,-3.0,1.0);
+glass(new THREE.CapsuleGeometry(0.55,2.8,10,16), -4.6,-3.0,-1.0);
+[[2.7,0.95],[2.7,-0.95],[-4.6,1.0],[-4.6,-1.0]].forEach(p=>
+  glass(new THREE.SphereGeometry(0.52,16,12), p[0],-4.5,p[1], 0,0,0, 1.3,0.7,1.1));
+// tail
+glass(new THREE.CapsuleGeometry(0.38,2.2,10,14), -6.6,0.3,0, 0,0,-Math.PI/3.2, 1,1,1);
+
+// ===== skeleton (ribs + spine + pelvis) toggle =====
+const skelGroup = new THREE.Group(); dog.add(skelGroup);
+const boneMat = new THREE.MeshStandardMaterial({color:0xdfe4ec, roughness:.6, metalness:.1, transparent:true, opacity:.5});
+// caudal rib pairs over the cranial abdomen (liver lies under these)
+for(let i=0;i<7;i++){
+  const x = 1.9 - i*0.62;
+  const r = 2.95 * Math.sqrt(Math.max(0.05, 1-(x/4.6)**2));
+  const rib=new THREE.Mesh(new THREE.TorusGeometry(r,.07,8,36,Math.PI*1.2), boneMat);
+  rib.position.x=x; rib.rotation.y=Math.PI/2; rib.rotation.z=Math.PI*0.13; skelGroup.add(rib);
+}
+// spine along the dorsal abdomen
+const spine=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,12,12), boneMat);
+spine.rotation.z=Math.PI/2; spine.position.set(-1.0,2.45,0); skelGroup.add(spine);
+// lumbar transverse processes hint
+for(let i=0;i<6;i++){
+  const x=-0.4 - i*0.7;
+  const tp=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,1.4), boneMat); tp.position.set(x,2.4,0); skelGroup.add(tp);
+}
+// pelvis ring
+const pelvis=new THREE.Mesh(new THREE.TorusGeometry(1.15,.12,10,28), boneMat);
+pelvis.position.set(-5.1,0.2,0); pelvis.rotation.y=Math.PI/2; skelGroup.add(pelvis);
+skelGroup.visible=false;
+
+// orientation labels (sprites)
+function makeLabel(txt, color='#9fb0cc'){
+  const c=document.createElement('canvas'); c.width=300;c.height=64;
+  const x=c.getContext('2d'); x.font='bold 32px Segoe UI'; x.fillStyle=color;
+  x.textAlign='center'; x.textBaseline='middle'; x.fillText(txt,150,32);
+  const t=new THREE.CanvasTexture(c);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true, depthTest:false}));
+  s.scale.set(2.6,.55,1); return s;
+}
+function addLabel(txt,color,x,y,z){ const s=makeLabel(txt,color); s.position.set(x,y,z); scene.add(s); }
+addLabel('Cranial ▸ (קרניאלי)','#7fa8e0',4.6,3.0,0);
+addLabel('◂ Caudal (כודלי)','#9fb0cc',-6.4,2.0,0);
+addLabel('Left (שמאל) ▸','#34d1bf',-2.0,0.6,4.4);
+addLabel('◂ Right (ימין)','#ffb454',-2.0,0.6,-4.4);
+
+/* =========================================================
+   3. ORGANS — geometry + bilingual teaching content
+   Each entry builds its own THREE.Group and carries the lesson.
+   color = base flesh tone (saturated when active, paled when not)
+   ========================================================= */
+const D2R = THREE.MathUtils.degToRad;
+const organsRoot = new THREE.Group(); dog.add(organsRoot);
+
+// reusable flesh material factory (each organ gets its own so we can fade independently)
+function flesh(color, rough=.42){
+  return new THREE.MeshPhysicalMaterial({
+    color:new THREE.Color(color), roughness:rough, metalness:0,
+    clearcoat:.5, clearcoatRoughness:.45, sheen:.4, sheenRoughness:.6,
+    transmission:.04, thickness:1.2, ior:1.36,
+    transparent:true, opacity:.95
+  });
+}
+
+// ---------- per-organ geometry builders ----------
+function buildLiver(g,mat){
+  // multi-lobed wedge tucked under the diaphragm
+  const lobe=(sx,sy,sz,px,py,pz,ry)=>{
+    const m=new THREE.Mesh(warp(new THREE.SphereGeometry(1,28,20),.06,1.4),mat);
+    m.scale.set(sx,sy,sz); m.position.set(px,py,pz); m.rotation.y=ry; g.add(m);
+  };
+  lobe(1.5,0.9,0.7, 0.1,0,0.5, .2);
+  lobe(1.4,0.85,0.65, 0.15,-0.15,-0.4, -.2);
+  lobe(1.1,0.8,0.6, 0.55,0.1,0.05, 0);
+  lobe(1.0,0.7,0.55,-0.35,-0.1,0.15, .3);
+  // gallbladder — anechoic sac on the right
+  const gbMat=new THREE.MeshPhysicalMaterial({color:0x1c2c3a, roughness:.15, transmission:.85,
+    thickness:.6, ior:1.33, transparent:true, opacity:.8, side:THREE.DoubleSide});
+  const gb=new THREE.Mesh(new THREE.SphereGeometry(0.42,24,18),gbMat);
+  gb.scale.set(.8,1.1,.8); gb.position.set(0.35,-0.5,-0.55); g.add(gb);
+  g.userData.extraMats=[gbMat];
+}
+function buildSpleen(g,mat){
+  // long, tongue-shaped, smooth — runs along the left body wall
+  const body=new THREE.Mesh(warp(new THREE.CapsuleGeometry(0.5,2.4,14,24),.04,1.2,1,1,.5),mat);
+  body.rotation.z=Math.PI/2.4; body.scale.set(1,1,.5); g.add(body);
+}
+function buildKidney(g,mat){
+  // bean shape: sphere scaled + indented hilus
+  const k=new THREE.Mesh(warp(new THREE.SphereGeometry(0.9,30,22),.05,1.5),mat);
+  k.scale.set(1.4,0.95,0.8); g.add(k);
+  // hilus dimple (darker)
+  const hil=new THREE.Mesh(new THREE.SphereGeometry(0.42,18,14),
+    new THREE.MeshStandardMaterial({color:0x6b1f17,roughness:.5,transparent:true,opacity:.9}));
+  hil.position.set(0,0,0.62); hil.scale.set(1.1,.7,.5); g.add(hil);
+  g.userData.extraMats=[hil.material];
+}
+function buildAdrenals(g,mat){
+  // two small peanut-shaped glands near midline
+  [[0.0,0.0,0.35],[0.0,0.1,-0.35]].forEach((p,i)=>{
+    const a=new THREE.Mesh(new THREE.CapsuleGeometry(0.16,0.4,8,14),mat);
+    a.position.set(p[0],p[1],p[2]); a.rotation.z=Math.PI/2.2; a.scale.set(1,1,.8); g.add(a);
+    // bilobed waist
+    const b=new THREE.Mesh(new THREE.CapsuleGeometry(0.13,0.3,8,14),mat);
+    b.position.set(p[0]-0.32,p[1],p[2]); b.rotation.z=Math.PI/2.2; g.add(b);
+  });
+}
+function buildStomach(g,mat){
+  const s=new THREE.Mesh(warp(new THREE.TorusGeometry(1.0,0.5,16,32,Math.PI*1.3),.05,1.2),mat);
+  s.rotation.x=Math.PI/2; s.rotation.z=Math.PI*0.1; s.scale.set(1,1,.7); g.add(s);
+}
+function buildPancreas(g,mat){
+  // right limb along duodenum + body; thin, lobulated
+  const r=new THREE.Mesh(warp(new THREE.CapsuleGeometry(0.22,2.0,10,18),.04,1.4),mat);
+  r.rotation.z=Math.PI/2.6; r.position.set(0.1,-0.1,-0.4); r.scale.set(1,1,.6); g.add(r);
+  const l=new THREE.Mesh(warp(new THREE.CapsuleGeometry(0.2,1.4,10,18),.04,1.4),mat);
+  l.rotation.z=-Math.PI/3; l.position.set(-0.5,0.1,0.4); l.scale.set(1,1,.6); g.add(l);
+}
+function buildSI(g,mat){
+  // several looping segments through mid-ventral abdomen
+  const wallMat=mat;
+  const lumMat=new THREE.MeshStandardMaterial({color:0x3a1410,roughness:.6,transparent:true,opacity:.85});
+  const loops=[
+    [[-1.2,-0.6,0.8],[-0.2,-1.0,0.3],[-1.0,-1.2,-0.5]],
+    [[0.4,-0.8,-0.6],[-0.6,-1.3,-0.9],[-1.6,-0.9,-0.4]],
+    [[-0.4,-0.5,1.0],[-1.4,-0.4,0.9],[-2.0,-0.9,0.2]],
+    [[-1.8,-1.0,-0.2],[-2.4,-0.5,0.5],[-2.0,-1.1,1.0]]
+  ];
+  loops.forEach(pts=>{
+    const curve=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)),false,'catmullrom',0.4);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.26,14,false),wallMat));
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.12,12,false),lumMat));
+  });
+  g.userData.extraMats=[lumMat];
+}
+function buildColon(g,mat){
+  // frame: ascending(right)→transverse→descending(left)→pelvis
+  const pts=[[ -0.2,-0.2,-1.4],[0.3,0.3,-1.0],[0.4,0.5,0.0],[0.0,0.4,1.2],
+             [-1.4,0.2,1.3],[-2.8,0.0,1.1],[-4.2,-0.3,0.6],[-5.0,-0.6,0.0]];
+  const curve=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)),false,'catmullrom',0.4);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve,90,0.34,16,false),mat));
+  // gas shadow hint (bright near wall, dark beyond) handled in 2D monitor
+}
+function buildLN(g,mat){
+  // a cluster of small oval nodes at the mesenteric root
+  [[0,0,0],[0.4,0.1,0.3],[-0.3,-0.1,-0.2],[0.1,0.3,-0.3],[-0.2,0.2,0.35]].forEach(p=>{
+    const n=new THREE.Mesh(warp(new THREE.SphereGeometry(0.26,18,14),.03,2),mat);
+    n.position.set(...p); n.scale.set(1.5,0.7,0.7); g.add(n);
+  });
+}
+function buildBladder(g,mat){
+  // anechoic sphere with a thin wall
+  const wallMat=new THREE.MeshPhysicalMaterial({color:0x2a4a6a, roughness:.2, transmission:.8,
+    thickness:.8, ior:1.33, transparent:true, opacity:.5, side:THREE.DoubleSide});
+  const b=new THREE.Mesh(new THREE.SphereGeometry(1.0,32,24),wallMat);
+  b.scale.set(1.2,0.95,1); g.add(b);
+  // faint inner lumen marker so it reads as filled
+  const inner=new THREE.Mesh(new THREE.SphereGeometry(0.9,24,18),
+    new THREE.MeshBasicMaterial({color:0x0a1a2a,transparent:true,opacity:.25}));
+  inner.scale.set(1.2,0.95,1); g.add(inner);
+  g.userData.extraMats=[wallMat]; g.userData.skipFade=[inner.material];
+}
+function buildProstate(g,mat){
+  // bilobed gland around the urethra, just caudal to the bladder neck
+  [[0,0,0.28],[0,0,-0.28]].forEach(p=>{
+    const l=new THREE.Mesh(warp(new THREE.SphereGeometry(0.5,24,18),.04,1.6),mat);
+    l.position.set(...p); l.scale.set(1,0.95,0.9); g.add(l);
+  });
+}
+function buildVessels(g,mat){
+  // aorta (left, pulsatile-looking) + caudal vena cava (right) along the dorsal midline
+  const ao=new THREE.CatmullRomCurve3([
+    new THREE.Vector3(1.0,1.6,0.25),new THREE.Vector3(-1.0,1.5,0.25),
+    new THREE.Vector3(-3.0,1.2,0.25),new THREE.Vector3(-4.6,0.6,0.2)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(ao,64,0.22,18,false),mat));
+  const cvcMat=new THREE.MeshPhysicalMaterial({color:0x3656a0,roughness:.4,clearcoat:.4,
+    transparent:true,opacity:.95});
+  const cvc=new THREE.CatmullRomCurve3([
+    new THREE.Vector3(1.0,1.5,-0.25),new THREE.Vector3(-1.0,1.45,-0.25),
+    new THREE.Vector3(-3.0,1.1,-0.22),new THREE.Vector3(-4.4,0.6,-0.2)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(cvc,64,0.24,18,false),cvcMat));
+  g.userData.extraMats=[cvcMat];
+}
+
+const ORGANS = [
+  {
+    id:'liver', he:'כבד + כיס מרה', name:'Liver & Gallbladder',
+    color:0x9e5b3e, pos:[0.4,-0.5,0.0], build:buildLiver,
+    probePos:[0.6,-2.7,0.2], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'מיד מאחורי עצם החזה (subxiphoid), הכלב בשכיבה גבית, פרוב ונטרלי מכוון קרניו-גבית מתחת לקשת הצלעות',
+    siteEn:'Subxiphoid, dorsal recumbency, probe angled cranio-dorsally under the costal arch',
+    mark:'סמן → קרניאלי; sweep מימין לשמאל דרך כל האונות',
+    plane:'מישור אורכי דרך הכבד, כיס המרה, והווריד הנבוב',
+    focus_beg:'מוצאים את הכבד מתחת לסרעפת. אקוגניות אחידה, גסה מעט מהטחול. כיס המרה = שק שחור (anechoic) מימין.',
+    focus_gen:'סורקים שיטתית את כל אונות הכבד, מעריכים גודל (חורג מעבר לקשת הצלעות?), אקוגניות, שולי הכבד, ומבנה כלי הדם (portal vs hepatic veins).',
+    focus_adv:'הבחנה portal (דופן אקואי) מ-hepatic veins (ללא דופן), הערכת gallbladder mucocele (תבנית kiwi), CBD <3 מ״מ, מוקדים (nodular hyperplasia מול neoplasia), מדידת זווית שוליים.',
+    see_he:'פרנכימה אחידה בינונית-אקואית, כלי דם portal עם דפנות בהירות, כיס מרה אנאקואי עם acoustic enhancement מאחוריו.',
+    see_en:'Homogeneous mid-echoic parenchyma, portal vessels with bright walls, anechoic gallbladder with distal enhancement.',
+    diseases:['Mucocele בכיס המרה','שחמת/פיברוזיס','ליפידוזיס (היפר-אקואי)','גרורות/לימפומה','גודש ורידי (CHF)'],
+    meas:'<b>דופן כיס מרה</b> &lt;1 מ״מ (≤2–3) · <b>CBD</b> &lt;3 מ״מ · גודל כבד סובייקטיבי (שוליים חדים = תקין)',
+    echo:'liver'
+  },
+  {
+    id:'spleen', he:'טחול', name:'Spleen',
+    color:0x8e3b54, pos:[-1.0,-1.2,1.25], build:buildSpleen,
+    probePos:[-1.0,-2.7,1.3], probeRot:[D2R(0),D2R(0),D2R(-12)],
+    site:'בטן שמאלית קרניאלית, ממש מתחת לדופן הגוף (שטחי). הראש קבוע ליד הקיבה, הגוף/הזנב נודדים',
+    siteEn:'Left cranial abdomen, immediately deep to the body wall (superficial)',
+    mark:'סמן → קרניאלי; עוקבים לאורך כל האיבר מהראש לזנב',
+    plane:'מישור אורכי לאורך הטחול',
+    focus_beg:'האיבר השטחי והאחיד ביותר. אקוגניות צפופה והומוגנית, בהירה מהכבד ומהכליה. שולי מתאר חלקים.',
+    focus_gen:'מעריכים גודל ועובי (splenomegaly?), אחידות הפרנכימה, ומוקדים. מודדים עובי במספר נקודות.',
+    focus_adv:'הבחנה nodular hyperplasia מול hemangiosarcoma/lymphoma, "Swiss cheese"/honeycomb בטורסיה, הערכת splenic vein, FNA מודרך.',
+    see_he:'פרנכימה דקיקת-גרגר, היפר-אקואית ואחידה, ה"קו הבהיר" הצפוף בבטן השמאלית.',
+    see_en:'Fine-grained, hyperechoic, uniform parenchyma — the bright superficial stripe in the left abdomen.',
+    diseases:['Hemangiosarcoma','לימפומה','Nodular hyperplasia','Splenic torsion','אוטם/המטומה'],
+    meas:'עובי סובייקטיבי · אקוגניות: <b>טחול &gt; כבד &gt; cortex כליה</b> · שוליים חלקים=תקין',
+    echo:'spleen'
+  },
+  {
+    id:'lkidney', he:'כליה שמאל', name:'Left Kidney',
+    color:0x9c6048, pos:[-2.3,0.5,1.0], build:buildKidney,
+    probePos:[-2.3,-2.4,1.1], probeRot:[D2R(0),D2R(0),D2R(-20)],
+    site:'בטן שמאלית, רטרופריטונאלית (גבית), כודלית לטחול. לרוב נגישה דרך הצד השמאלי',
+    siteEn:'Left retroperitoneal, dorsal, caudal to the spleen',
+    mark:'סמן → קרניאלי; חתך אורכי (bean) ואז סיבוב 90° לחתך רוחבי',
+    plane:'מישור אורכי דרך ה-hilus + חתך רוחבי',
+    focus_beg:'צורת "שעועית". מבדילים cortex בהיר (חיצוני) מ-medulla כהה (פנימי), ובמרכז ה-renal pelvis הבהיר עם השומן.',
+    focus_gen:'מודדים אורך, מעריכים corticomedullary distinction, רוחב הקורטקס, ונוכחות הידרונפרוזיס/אבנים. יחס אורך כליה : אאורטה.',
+    focus_adv:'יחס renal length:aorta 5.5–9.1, הערכת CKD (קורטקס דק היפר-אקואי, infarcts), pyelectasia &lt;2–3 מ״מ, medullary rim sign, RI בדופלר.',
+    see_he:'cortex היפר-אקואי ל-medulla, גבול קורטיקו-מדולרי חד, sinus מרכזי בהיר (שומן+pelvis), מתאר חלק.',
+    see_en:'Cortex hyperechoic to medulla, sharp corticomedullary junction, bright central sinus, smooth capsule.',
+    diseases:['CKD/נפרופתיה','הידרונפרוזיס','אבנים/מינרליזציה','ציסטות','לימפומה כלייתית'],
+    meas:'<b>אורך</b> ~5.5–9.3 ס״מ · <b>renal:aorta</b> 5.5–9.1 · <b>pelvis</b> &lt;2–3 מ״מ · cortex &lt; medulla באקוגניות',
+    echo:'kidney'
+  },
+  {
+    id:'rkidney', he:'כליה ימין', name:'Right Kidney',
+    color:0x9c6048, pos:[-1.0,0.7,-0.95], build:buildKidney,
+    probePos:[-1.0,-2.3,-1.0], probeRot:[D2R(0),D2R(0),D2R(22)],
+    site:'יותר קרניאלית מהשמאלית, "כלואה" מתחת לצלעות האחרונות וצמודה לכבד (renal fossa). לעיתים דרושה גישה בין-צלעית',
+    siteEn:'More cranial than the left, tucked under the last ribs against the caudate liver lobe',
+    mark:'סמן → קרניאלי; ייתכן צורך בגישה בין-צלעית (intercostal)',
+    plane:'מישור אורכי דרך ה-hilus',
+    focus_beg:'אותה אנטומיה כמו הכליה השמאלית, אך קשה יותר למצוא — מחפשים אותה צמוד לכבד מתחת לצלעות.',
+    focus_gen:'אותם עקרונות מדידה. השוואת סימטריה בין שתי הכליות חשובה — אסימטריה מחשידה.',
+    focus_adv:'גישה בין-צלעית ימנית, השוואת גודל/אקוגניות בין הכליות, הערכת renal fossa, חיבור ל-CVC ול-renal vessels.',
+    see_he:'זהה לכליה השמאלית; ממוקמת קרניו-גבית וצמודה ל-caudate lobe של הכבד.',
+    see_en:'Identical architecture; located cranio-dorsally, abutting the hepatic caudate lobe.',
+    diseases:['CKD','הידרונפרוזיס','אבנים','ציסטות','אסימטריה כלייתית (פתולוגית)'],
+    meas:'מדידות זהות לכליה השמאלית · השוואת <b>סימטריה</b> בין הכליות = מפתח',
+    echo:'kidney'
+  },
+  {
+    id:'adrenals', he:'בלוטות יותרת הכליה', name:'Adrenal Glands',
+    color:0xb8a25e, pos:[-1.7,0.4,0.0], build:buildAdrenals,
+    probePos:[-1.6,-2.2,0.0], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'מדיאלית לכליות, צמוד לאאורטה (שמאל) ולווריד הנבוב (ימין). landmark: עוקבים את כלי הדם הגדולים',
+    siteEn:'Medial to the kidneys, alongside aorta (left) and CVC (right) — follow the great vessels',
+    mark:'סמן → קרניאלי; מאתרים על-ידי מעקב אחר אבי העורקים/CVC',
+    plane:'מישור אורכי לאורך כלי הדם הגדולים',
+    focus_beg:'בלוטות קטנות בצורת "בוטן" (שמאל) או חץ (ימין). היפו-אקואיות, ממש ליד כלי הדם הגדולים.',
+    focus_gen:'מודדים עובי הקוטב הכודלי. מחפשים הגדלה/אובדן צורת השעועית — חשוב באבחון Cushing/גידול.',
+    focus_adv:'עובי קוטב כודלי &lt;7.4 מ״מ, צורת bilobed שמורה, הבחנה adenoma מול carcinoma מול pheochromocytoma (פלישה ל-CVC!), הערכת thrombus.',
+    see_he:'בלוטה היפו-אקואית קטנה בצורת בוטן (שמאל) או V (ימין), צמודה לכלי הדם, עם קורטקס/מדולה לעיתים.',
+    see_en:'Small hypoechoic peanut (left) / arrowhead (right) gland adjacent to the great vessels.',
+    diseases:['Cushing (הגדלה דו-צדדית)','אדנומה/קרצינומה','Pheochromocytoma','אטרופיה (Addison/iatrogenic)'],
+    meas:'<b>עובי קוטב כודלי</b> &lt;7.4 מ״מ (כלב) · &gt;10 מ״מ או אובדן צורה = חשד · פלישה ל-CVC = ממאיר',
+    echo:'adrenal'
+  },
+  {
+    id:'stomach', he:'קיבה', name:'Stomach',
+    color:0xa86b52, pos:[-0.5,-0.3,0.65], build:buildStomach,
+    probePos:[-0.5,-2.6,0.5], probeRot:[D2R(0),D2R(0),D2R(-6)],
+    site:'בטן קרניאלית, כודלית לכבד. הפונדוס שמאלי, ה-pylorus ימני. סורקים מהקרדיה לפילורוס',
+    siteEn:'Cranial abdomen caudal to the liver; fundus left, pylorus right',
+    mark:'סמן → קרניאלי; עוקבים את הקיבה מהפונדוס לפילורוס',
+    plane:'מישור אורכי + רוחבי דרך דופן הקיבה',
+    focus_beg:'מזהים את הקיבה לפי קפלי ה-rugae (תבנית "גלגל" בחתך רוחבי). סופרים שכבות דופן.',
+    focus_gen:'מעריכים עובי דופן, שכבות (5 שכבות), תכולה (מזון/גז/נוזל), ופריסטלטיקה. גז יוצר צל אקוסטי.',
+    focus_adv:'עובי דופן &lt;5 מ״מ, שמירת שכבתיות (אובדן=neoplasia/דלקת), foreign body + צל, gastric outflow obstruction, "pseudolayering" של תכולה.',
+    see_he:'דופן 5-שכבתית, קפלי rugae, פריסטלטיקה פעילה, גז עם reverberation/צל מאחור.',
+    see_en:'Five-layered wall, rugal folds, active peristalsis, intraluminal gas with shadowing.',
+    diseases:['גוף זר','גידול (אדנוקרצינומה/לימפומה)','כיב','דלקת קיבה','חסימת מוצא הקיבה'],
+    meas:'<b>עובי דופן</b> &lt;3–5 מ״מ · <b>5 שכבות</b> שמורות · פריסטלטיקה ~4–5/דקה',
+    echo:'git'
+  },
+  {
+    id:'pancreas', he:'לבלב', name:'Pancreas',
+    color:0xc2a273, pos:[-0.3,-0.3,-0.5], build:buildPancreas,
+    probePos:[-0.3,-2.4,-0.5], probeRot:[D2R(0),D2R(0),D2R(10)],
+    site:'הזרוע הימנית לאורך התריסריון (גישה ימנית), הזרוע השמאלית מאחורי הקיבה. landmark: vena pancreatico-duodenalis',
+    siteEn:'Right limb along the descending duodenum; left limb behind the stomach',
+    mark:'סמן → קרניאלי; מאתרים את התריסריון ועוקבים מדיאלית',
+    plane:'מישור אורכי לאורך התריסריון',
+    focus_beg:'איבר עדין וקשה לזיהוי. מאתרים קודם את התריסריון (ימין), והלבלב צמוד אליו מדיאלית.',
+    focus_gen:'מעריכים עובי, אקוגניות (איזו-אקואי לתקין), והאזור הסובב (mesentery היפר-אקואי = דלקת). מחפשים pancreatic duct.',
+    focus_adv:'pancreatitis: לבלב מעובה היפו-אקואי + שומן סובב היפר-אקואי + נוזל חופשי מקומי, הבחנה מ-EPI, nodular hyperplasia מול carcinoma/insulinoma, duct &lt;1 מ״מ.',
+    see_he:'איבר דק לובולרי איזו/היפו-אקואי לאורך התריסריון; בדלקת — מעובה, כהה, מוקף בשומן בהיר.',
+    see_en:'Thin lobulated iso/hypoechoic organ along the duodenum; in pancreatitis: thick, dark, bright surrounding fat.',
+    diseases:['Pancreatitis (חריף/כרוני)','Insulinoma','אדנוקרצינומה','בצקת/אבצס','ציסטה/pseudocyst'],
+    meas:'<b>עובי</b> &lt;1 ס״מ · <b>duct</b> &lt;1 מ״מ · שומן סובב בהיר = דגל אדום לדלקת',
+    echo:'pancreas'
+  },
+  {
+    id:'si', he:'מעי דק', name:'Small Intestine',
+    color:0xb07a5c, pos:[-1.4,-0.85,0.1], build:buildSI,
+    probePos:[-1.6,-2.7,0.1], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'סריקה שיטתית של כל הבטן הוונטרלית-מרכזית, לולאה אחר לולאה (duodenum ימני, jejunum מרכזי, ileum)',
+    siteEn:'Systematic sweep of the ventral-central abdomen, loop by loop',
+    mark:'סמן → קרניאלי; חתך אורכי לכל לולאה ואז רוחבי ("wagon wheel")',
+    plane:'אורכי (צינור) + רוחבי (גלגל)',
+    focus_beg:'סופרים 5 שכבות דופן (mucosa→serosa). מודדים עובי. מחפשים פריסטלטיקה ותכולה נורמלית.',
+    focus_gen:'מעריכים עובי דופן לפי מקטע, שמירת שכבתיות, קוטר הלולאה (דילטציה=חסימה), ותנועתיות. מחפשים גוף זר/intussusception.',
+    focus_adv:'jejunum &lt;4–4.7 מ״מ, duodenum &lt;5–6 מ״מ; אובדן שכבתיות מוקדי=neoplasia, עיבוי mucosa מפושט=IBD/lymphoma, "target"=intussusception, plication=linear FB, mucosal speckling.',
+    see_he:'צינור עם 5 שכבות מתחלפות, פריסטלטיקה, mucosa היפו-אקואית עבה יחסית; בחתך רוחבי — תבנית "גלגל".',
+    see_en:'Tube with 5 alternating layers, peristalsis, prominent hypoechoic mucosa; transverse "wagon-wheel".',
+    diseases:['גוף זר (כולל linear)','Intussusception','IBD','לימפומה/אדנוקרצינומה','דלקת מעי (enteritis)'],
+    meas:'<b>jejunum</b> &lt;4–4.7 מ״מ · <b>duodenum</b> &lt;5–6 מ״מ · <b>5 שכבות</b> שמורות · קוטר תקין לא מורחב',
+    echo:'git'
+  },
+  {
+    id:'colon', he:'מעי גס', name:'Large Intestine (Colon)',
+    color:0x97765a, pos:[-2.2,-0.1,0.2], build:buildColon,
+    probePos:[-3.4,-2.5,0.3], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'מסגרת הבטן: עולה (ימין) → רוחבי → יורד (שמאל) → אל האגן. לרוב מלא גז ויוצר צל',
+    siteEn:'Frames the abdomen: ascending(R)→transverse→descending(L)→pelvis',
+    mark:'סמן → קרניאלי; מזהים לפי הקוטר הגדול והגז',
+    plane:'אורכי לאורך מסגרת הבטן',
+    focus_beg:'מעי רחב יותר מהמעי הדק, דק-דופן, ולרוב מלא גז שיוצר קו בהיר עם "צל מלוכלך" מאחור.',
+    focus_gen:'מעריכים דופן דקה (&lt;2–3 מ״מ), תכולה (צואה/גז), ומחפשים עיבוי מוקדי/מסה. הגז מסתיר את הדופן הרחוקה.',
+    focus_adv:'דופן &lt;1.5–2.5 מ״מ, הבחנה ileocolic neoplasia, typhlitis (cecum), ileocecocolic intussusception, מסות פרי-רקטליות, השוואה ל-SI.',
+    see_he:'קשת בהירה (interface גז) עם צל אקוסטי "מלוכלך", דופן דקה, קוטר גדול מ-SI.',
+    see_en:'Bright gas interface with "dirty" shadowing, thin wall, wider lumen than SI.',
+    diseases:['גידול (אדנוקרצינומה)','Typhlitis','Intussusception ileocolic','מסה פרי-רקטלית','עצירות/megacolon'],
+    meas:'<b>עובי דופן</b> &lt;1.5–2.5 מ״מ · רחב מ-SI · גז = צל "מלוכלך"',
+    echo:'colon'
+  },
+  {
+    id:'ln', he:'בלוטות לימפה מזנטריות', name:'Mesenteric Lymph Nodes',
+    color:0x7fa07a, pos:[-2.4,-0.3,0.0], build:buildLN,
+    probePos:[-2.4,-2.6,0.0], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'שורש המזנטריום במרכז הבטן, בין לולאות המעי. ה-jejunal LN הוא הגדול ביותר',
+    siteEn:'Mesenteric root, central abdomen between intestinal loops',
+    mark:'סמן → קרניאלי; סורקים את מרכז הבטן בין הלולאות',
+    plane:'אורכי דרך הצומת המזנטרי',
+    focus_beg:'בלוטות קטנות, אליפסיות, היפו-אקואיות עדינות. בכלב צעיר/בריא קשה לראותן — אם בולטות, חשד.',
+    focus_gen:'מודדים גודל ועובי, מעריכים צורה (אליפסי=תקין, עגול=חשוד) ואקוגניות. בלוטות מוגדלות מחייבות בירור.',
+    focus_adv:'lymphadenopathy: עגול היפו-אקואי, אובדן hilus, מדידת short axis, הבחנה reactive מול lymphoma/metastasis, color Doppler (peripheral=ממאיר), FNA מודרך.',
+    see_he:'בלוטות אליפסיות היפו-אקואיות עדינות; כשמוגדלות — עגולות, כהות, בולטות בין הלולאות.',
+    see_en:'Subtle ovoid hypoechoic nodes; when enlarged — rounded, dark, conspicuous between loops.',
+    diseases:['לימפומה','גרורות (metastasis)','Lymphadenitis reactive','מחלה דלקתית של המעי'],
+    meas:'אליפסי + hilus = תקין · <b>עגול + מוגדל</b> = חשד · short axis למעקב',
+    echo:'ln'
+  },
+  {
+    id:'bladder', he:'שלפוחית השתן', name:'Urinary Bladder',
+    color:0x6f9ad6, pos:[-4.5,-1.1,0.0], build:buildBladder,
+    probePos:[-4.5,-2.6,0.0], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'בטן כודלית-ונטרלית, מיד קרניאלית לאגן. עדיף כשהיא מלאה. גישה ונטרלית',
+    siteEn:'Caudo-ventral abdomen just cranial to the pelvic inlet; ideally distended',
+    mark:'סמן → קרניאלי; חתך אורכי ורוחבי, מתחילים מהקודקוד עד הצוואר',
+    plane:'אורכי (אגס) + רוחבי (עיגול)',
+    focus_beg:'שק עגול שחור (anechoic) עם דופן דקה וחלקה. acoustic enhancement בהיר מאחוריו. מחפשים אבנים בקרקעית.',
+    focus_gen:'מעריכים עובי ואחידות דופן, תכולה (משקעים/אבנים עם צל ותנועה תלוית-כובד), ופוליפים/מסות (trigone).',
+    focus_adv:'דופן &lt;1–2 מ״מ (מלאה), TCC ב-trigone (לא נע, vascular), הבחנה cystitis (עיבוי קדמי-ונטרלי) מ-blood clot (נע, ללא זרימה), jets שתן בדופלר, מדידת נפח.',
+    see_he:'חלל אנאקואי עם דופן דקה; אבנים = מוקד בהיר היפר-אקואי עם צל, נע עם תנוחה; enhancement דיסטלי.',
+    see_en:'Anechoic lumen, thin wall; calculi = hyperechoic foci with shadowing, gravity-dependent; distal enhancement.',
+    diseases:['אבנים (urolithiasis)','TCC/קרצינומה (trigone)','Cystitis','קריש דם','פוליפ'],
+    meas:'<b>עובי דופן</b> &lt;1–2 מ״מ (מלאה) · אבן = צל + תנועה תלוית-כובד · מסה ב-trigone = חשד TCC',
+    echo:'bladder'
+  },
+  {
+    id:'prostate', he:'ערמונית / רחם', name:'Prostate / Uterus',
+    color:0x9a6a86, pos:[-5.2,-0.9,0.0], build:buildProstate,
+    probePos:[-5.2,-2.4,0.0], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'כודלית לשלפוחית, סביב השופכה בכניסה לאגן. ברחם — בין השלפוחית לקולון (לרוב לא נראה אם תקין)',
+    siteEn:'Caudal to the bladder around the urethra at the pelvic inlet',
+    mark:'סמן → קרניאלי; ממשיכים כודלית מצוואר השלפוחית',
+    plane:'אורכי + רוחבי דרך הבלוטה',
+    focus_beg:'בזכר: בלוטה דו-אונתית סימטרית סביב השופכה. ברחם נקבה תקין — צינור דק שכמעט לא נראה.',
+    focus_gen:'בזכר: מודדים גודל (תלוי משקל), סימטריה, אחידות, ציסטות. ברחם: מחפשים הרחבה (pyometra/הריון).',
+    focus_adv:'BPH (הגדלה סימטרית + ציסטות), prostatitis/abscess, neoplasia (אסימטרי, מינרליזציה, בכלב מסורס=דגל אדום!); רחם: pyometra (צינור מלא נוזל), stump granuloma, מדידת קוטר.',
+    see_he:'בזכר: בלוטה דו-אונתית סימטרית מתחת לשלפוחית. ברחם פתולוגי: מבנה צינורי מפותל מלא נוזל בין שלפוחית לקולון.',
+    see_en:'Male: symmetric bilobed gland below the bladder. Pathologic uterus: fluid-filled tubular coils.',
+    diseases:['BPH','Prostatitis/אבצס','קרצינומה (גם במסורס)','Pyometra (רחם)','Stump pyometra'],
+    meas:'ערמונית: גודל תלוי משקל, <b>סימטריה</b> + אחידות = תקין · רחם תקין כמעט לא נראה · מינרליזציה במסורס = חשד',
+    echo:'prostate'
+  },
+  {
+    id:'vessels', he:'אבי העורקים + וריד נבוב', name:'Aorta & Caudal Vena Cava',
+    color:0xc23b30, pos:[-2.0,1.2,0.0], build:buildVessels,
+    probePos:[-2.0,-2.3,0.0], probeRot:[D2R(0),D2R(0),D2R(0)],
+    site:'גבית במרכז הבטן, צמוד לעמוד השדרה. אבי העורקים שמאלי-גבי, הווריד הנבוב ימני-ונטרלי לו',
+    siteEn:'Dorsal mid-abdomen against the spine; aorta dorso-left, CVC ventro-right',
+    mark:'סמן → קרניאלי; הם ה-landmark למעקב אחר ה-adrenals והבלוטות',
+    plane:'אורכי לאורך עמוד השדרה',
+    focus_beg:'שני "צינורות" שחורים מקבילים. אבי העורקים = עגול, פועם, דופן עבה. הווריד הנבוב = מתמוטט עם הנשימה.',
+    focus_gen:'משתמשים בהם כ-landmark מרכזי. מעריכים קוטר, פעימה (אאורטה), והשתנות נשימתית (CVC). דופלר לזרימה.',
+    focus_adv:'CVC מורחב לא-מתמוטט = גודש ימני/CHF/pericardial; thrombus (neoplastic מ-adrenal/kidney), aortic thrombosis (saddle), הערכת זרימה portal, AV fistula, מדידת CVC:aorta ratio.',
+    see_he:'אאורטה: צינור עגול פועם דופן עבה. CVC: צינור אליפסי מתמוטט-נשימתית, ימני-ונטרלי לאאורטה.',
+    see_en:'Aorta: round pulsatile thick wall. CVC: ovoid, respiration-collapsing, ventro-right to aorta.',
+    diseases:['CVC distension (CHF ימני)','Thrombus (gid/neoplastic)','Aortic thrombosis','Portal hypertension'],
+    meas:'<b>CVC</b> מתמוטט עם נשימה = תקין · CVC לא-מתמוטט מורחב = גודש ימני · אאורטה פועמת דופן עבה',
+    echo:'vessels'
+  }
+];
+
+/* ---- build all organ groups + register materials for fading ---- */
+const organData = {};   // id -> {group, mats, base:[Color...], pos}
+ORGANS.forEach(o=>{
+  const g=new THREE.Group(); g.position.set(...o.pos);
+  const mat=flesh(o.color);
+  o.build(g,mat);
+  // collect every material under the group so we can fade the whole organ
+  const mats=new Set([mat]);
+  if(g.userData.extraMats) g.userData.extraMats.forEach(m=>mats.add(m));
+  g.traverse(ch=>{ if(ch.material) mats.add(ch.material); });
+  const skip=new Set(g.userData.skipFade||[]);
+  const list=[...mats].filter(m=>!skip.has(m));
+  organData[o.id]={
+    group:g, mats:list,
+    base:list.map(m=>({color:m.color.clone(), opacity:m.opacity})),
+    pos:new THREE.Vector3(...o.pos)
+  };
+  organsRoot.add(g);
+});
+
+const PALE = new THREE.Color(0x4a5a72);   // washed-out tint for inactive organs
+function applyFade(){
+  ORGANS.forEach((o,i)=>{
+    const d=organData[o.id];
+    const active = (i===cur);
+    d.mats.forEach((m,j)=>{
+      const b=d.base[j];
+      const show = active || ghostAll;
+      const tgtCol = show ? b.color : b.color.clone().lerp(PALE,0.62);
+      const tgtOp  = show ? b.opacity : Math.min(b.opacity,0.3);
+      m.color.lerp(tgtCol, 0.18);
+      m.opacity += (tgtOp-m.opacity)*0.18;
+      if(m.emissive){ m.emissive.lerp(active?new THREE.Color(o.color).multiplyScalar(0.18):new THREE.Color(0x000000),0.15); }
+    });
+    // active organ gently scales up
+    const s=ghostAll?1: (active?1.06:1.0);
+    d.group.scale.x += (s-d.group.scale.x)*0.15;
+    d.group.scale.y += (s-d.group.scale.y)*0.15;
+    d.group.scale.z += (s-d.group.scale.z)*0.15;
+  });
+}
+
+/* =========================================================
+   4. TRANSDUCER (probe) + ULTRASOUND BEAM (sector) + gloved hand
+   ========================================================= */
+const probe = new THREE.Group(); dog.add(probe);
+const pBody = new THREE.Mesh(new THREE.CylinderGeometry(.26,.34,1.2,20),
+  new THREE.MeshStandardMaterial({color:0x202736, roughness:.5, metalness:.3}));
+probe.add(pBody);
+const pFace = new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.12,20),
+  new THREE.MeshStandardMaterial({color:0x34d1bf, emissive:0x0c6b60, emissiveIntensity:.6}));
+pFace.position.y=-.66; probe.add(pFace);
+const pCable = new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.0,8),
+  new THREE.MeshStandardMaterial({color:0x111722}));
+pCable.position.y=.9; probe.add(pCable);
+const pMark = new THREE.Mesh(new THREE.SphereGeometry(.085,12,12),
+  new THREE.MeshStandardMaterial({color:0xffd24a, emissive:0xaa7a00, emissiveIntensity:.7}));
+pMark.position.set(.24,-.38,0); probe.add(pMark);
+
+// gloved hand holding the probe
+const hand = new THREE.Group(); probe.add(hand);
+const gloveMat = new THREE.MeshStandardMaterial({color:0x57b4c4, roughness:.55, metalness:.05});
+const skinShine = new THREE.MeshStandardMaterial({color:0x4aa7b8, roughness:.5});
+const palm = new THREE.Mesh(new THREE.SphereGeometry(0.48,24,18), gloveMat);
+palm.scale.set(0.95,0.55,1.0); palm.position.set(0.0,0.46,0.4); hand.add(palm);
+function finger(l1,l2,r,bend){
+  const g=new THREE.Group();
+  const s1=new THREE.Mesh(new THREE.CapsuleGeometry(r,l1,8,12), gloveMat);
+  s1.position.y=-l1/2; g.add(s1);
+  const j=new THREE.Group(); j.position.y=-l1; j.rotation.x=bend; g.add(j);
+  const s2=new THREE.Mesh(new THREE.CapsuleGeometry(r*0.88,l2,8,12), gloveMat);
+  s2.position.y=-l2/2; j.add(s2); return g;
+}
+[-0.31,-0.1,0.1,0.31].forEach((fx,i)=>{
+  const f=finger(0.32,0.28,0.1,0.95+(i===0||i===3?0.15:0));
+  f.position.set(fx,0.58,0.12); f.rotation.x=0.55; hand.add(f);
+});
+const thumb=finger(0.3,0.24,0.12,0.8);
+thumb.position.set(0.4,0.38,-0.05); thumb.rotation.set(0.4,0,-0.9); hand.add(thumb);
+const wrist=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.44,0.5,18), gloveMat);
+wrist.position.set(0.0,0.9,0.66); wrist.rotation.x=0.6; hand.add(wrist);
+const cuff=new THREE.Mesh(new THREE.TorusGeometry(0.44,0.1,12,28),
+  new THREE.MeshStandardMaterial({color:0x2f6f7c,roughness:.6}));
+cuff.position.set(0.0,1.1,0.8); cuff.rotation.x=Math.PI/2-0.6; hand.add(cuff);
+const forearm=new THREE.Mesh(new THREE.CylinderGeometry(0.44,0.58,2.3,18), skinShine);
+forearm.position.set(0.0,1.9,1.3); forearm.rotation.x=0.65; hand.add(forearm);
+
+// BEAM — flat sector (imaging plane) from probe face
+const beamGroup = new THREE.Group(); probe.add(beamGroup);
+const SECTOR_DEG = 64, SECTOR_LEN = 5.0;
+function buildSector(){
+  const shape = new THREE.Shape();
+  const half = THREE.MathUtils.degToRad(SECTOR_DEG/2);
+  shape.moveTo(0,0);
+  const seg=24;
+  for(let i=0;i<=seg;i++){
+    const a = -half + (2*half)*(i/seg);
+    shape.lineTo(Math.sin(a)*SECTOR_LEN, -Math.cos(a)*SECTOR_LEN);
+  }
+  shape.lineTo(0,0);
+  return new THREE.ShapeGeometry(shape);
+}
+const beamMat = new THREE.MeshBasicMaterial({color:0xffd24a, transparent:true, opacity:.15,
+  side:THREE.DoubleSide, depthWrite:false, blending:THREE.AdditiveBlending});
+const beamMesh = new THREE.Mesh(buildSector(), beamMat);
+beamMesh.position.y=-.68; beamGroup.add(beamMesh);
+const beamEdge = new THREE.LineSegments(new THREE.EdgesGeometry(buildSector()),
+  new THREE.LineBasicMaterial({color:0xffe27a, transparent:true, opacity:.5}));
+beamEdge.position.y=-.68; beamGroup.add(beamEdge);
+const scanLine = new THREE.Mesh(new THREE.PlaneGeometry(.03, SECTOR_LEN),
+  new THREE.MeshBasicMaterial({color:0xfff4c0, transparent:true, opacity:.5, blending:THREE.AdditiveBlending}));
+scanLine.position.set(0,-.68-SECTOR_LEN/2,.001); beamGroup.add(scanLine);
+
+/* =========================================================
+   5. UI — explanation window (bilingual, 3 levels)
+   ========================================================= */
+let cur = 0;
+let level = 'gen';        // beg | gen | adv
+let mode = 'full';        // full | single | demo
+let ghostAll = false;     // "show all organs" — disables fade
+const explainEl = document.getElementById('explain');
+
+function renderExplain(){
+  const v = ORGANS[cur];
+  const focusText = level==='beg'? v.focus_beg : level==='adv'? v.focus_adv : v.focus_gen;
+  explainEl.innerHTML = `
+    <span class="pill">${mode==='single'?'תרגול אבר':'שלב'} ${cur+1} / ${ORGANS.length}</span>
+    <h2>🔎 ${v.he}</h2>
+    <div class="en">${v.name}</div>
+
+    <div class="levels">
+      <div class="lvl ${level==='beg'?'on':''}" data-lvl="beg">מתחיל</div>
+      <div class="lvl ${level==='gen'?'on':''}" data-lvl="gen">כללי</div>
+      <div class="lvl ${level==='adv'?'on':''}" data-lvl="adv">מתקדם</div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="ic">📍</span> מיקום ומנח · Probe placement</h3>
+      <p>${v.site}<span class="ennote">${v.siteEn}</span></p>
+    </div>
+
+    <div class="sec">
+      <h3><span class="ic">🎯</span> טכניקה ודגש · Technique & focus</h3>
+      <p>${focusText}</p>
+    </div>
+
+    <div class="sec">
+      <h3><span class="ic">👁️</span> מה רואים · What you see</h3>
+      <p>${v.see_he}<span class="ennote">${v.see_en}</span></p>
+    </div>
+
+    <div class="sec">
+      <h3><span class="ic">📐</span> מידות נורמליות · Measurements</h3>
+      <div class="meas">${v.meas}</div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="ic">🩺</span> פתולוגיות נפוצות · Pathologies</h3>
+      <div>${v.diseases.map(d=>`<span class="dz">${d}</span>`).join('')}</div>
+      <div id="realUS">משבצת לתמונת US אמיתית (יתווסף בהמשך)</div>
+    </div>
+  `;
+  explainEl.querySelectorAll('.lvl').forEach(el=>{
+    el.onclick = ()=>{ level = el.dataset.lvl; renderExplain(); };
+  });
+  document.getElementById('oPos').innerHTML = `<b>חלון:</b> ${v.site.split(',')[0]}`;
+  document.getElementById('oMark').innerHTML = `${v.mark}`;
+  document.getElementById('oPlane').innerHTML = `<b>מישור:</b> ${v.plane}`;
+  document.getElementById('mTitle').textContent = '2D US · '+v.id.toUpperCase();
+  document.getElementById('echoCap').textContent = v.name;
+  document.querySelectorAll('#dots .dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  document.getElementById('stepLabel').textContent = `${cur+1}/${ORGANS.length}`;
+  // organ menu highlight
+  document.querySelectorAll('#organMenu .oi').forEach((el,i)=>el.classList.toggle('on',i===cur));
+}
+
+/* ---- bottom dots ---- */
+const dotsEl = document.getElementById('dots');
+ORGANS.forEach((v,i)=>{
+  const d=document.createElement('div'); d.className='dot'; d.title=v.he;
+  d.onclick=()=>goTo(i); dotsEl.appendChild(d);
+});
+
+/* ---- left organ menu ---- */
+const menuEl = document.getElementById('organMenu');
+ORGANS.forEach((v,i)=>{
+  const el=document.createElement('div'); el.className='oi';
+  el.innerHTML=`<span class="sw" style="background:#${new THREE.Color(v.color).getHexString()}"></span>
+    <span class="nm">${v.he}</span><span class="nn">${i+1}</span>`;
+  el.onclick=()=>goTo(i); menuEl.appendChild(el);
+});
+
+/* =========================================================
+   6. PROBE / CAMERA animation between organs (tweened)
+   ========================================================= */
+let tween = null;
+const probeBase = new THREE.Euler();
+function goTo(i){
+  cur = (i + ORGANS.length) % ORGANS.length;
+  const v = ORGANS[cur];
+  const from = {p:probe.position.clone(), r:probe.rotation.clone()};
+  // flip the probe so its face/beam point UP into the ventral abdomen (probe approaches from below)
+  const to = {p:new THREE.Vector3(...v.probePos),
+              r:new THREE.Euler(v.probeRot[0]+Math.PI, v.probeRot[1], v.probeRot[2])};
+  probeBase.copy(to.r);
+  // camera frames the organ from ventral-left so the working hand is visible
+  const od = organData[v.id].pos;
+  const side = od.z >= 0 ? 1 : -1;
+  const camTo = new THREE.Vector3(od.x*0.6+1.5, -2.0, side*13.5 + (side>0?2:-2));
+  const camFrom = camera.position.clone();
+  const tgtTo = new THREE.Vector3(od.x, od.y-0.2, od.z*0.4), tgtFrom = controls.target.clone();
+  const t0 = performance.now(), dur=900;
+  tween = (now)=>{
+    let k = Math.min(1,(now-t0)/dur); k = k<.5? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+    probe.position.lerpVectors(from.p, to.p, k);
+    probe.rotation.x = from.r.x + (to.r.x-from.r.x)*k;
+    probe.rotation.y = from.r.y + (to.r.y-from.r.y)*k;
+    probe.rotation.z = from.r.z + (to.r.z-from.r.z)*k;
+    camera.position.lerpVectors(camFrom, camTo, k);
+    controls.target.lerpVectors(tgtFrom, tgtTo, k);
+    if(k>=1) tween=null;
+  };
+  renderExplain();
+}
+
+document.getElementById('next').onclick = ()=>goTo(cur+1);
+document.getElementById('prev').onclick = ()=>goTo(cur-1);
+
+/* ---- auto demo ---- */
+let auto=false, autoTimer=null;
+const autoBtn = document.getElementById('autoPlay');
+function setAuto(on){
+  auto=on;
+  autoBtn.textContent = auto? '⏸ עצור' : '▶ הדגמה';
+  autoBtn.style.background = auto? 'var(--warn)':'var(--accent)';
+  clearTimeout(autoTimer);
+  if(auto){ const tick=()=>{ if(!auto) return; goTo(cur+1); autoTimer=setTimeout(tick,4400); };
+    autoTimer=setTimeout(tick,4400); }
+}
+autoBtn.onclick = ()=>setAuto(!auto);
+
+/* ---- mode switch ---- */
+const navPrev=document.getElementById('prev'), navNext=document.getElementById('next');
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('#modes .mode').forEach(el=>el.classList.toggle('on',el.dataset.mode===m));
+  if(m==='demo'){ setAuto(true); }
+  else { setAuto(false); }
+  // single mode: hide stepper navigation, rely on organ menu
+  const singleHide = (m==='single');
+  navPrev.style.display = singleHide?'none':'';
+  navNext.style.display = singleHide?'none':'';
+  dotsEl.style.display = singleHide?'none':'flex';
+  renderExplain();
+}
+document.querySelectorAll('#modes .mode').forEach(el=> el.onclick=()=>setMode(el.dataset.mode));
+
+/* =========================================================
+   7. 2D US MONITOR (schematic, animated, sector)
+   ========================================================= */
+const ec = document.getElementById('echoCanvas');
+const ex = ec.getContext('2d');
+const EW=280, EH=220;
+const SEC_A0=Math.PI*0.74, SEC_A1=Math.PI*0.26, SEC_R=EH-18, SEC_APX=6;
+function sectorMask(){
+  ex.beginPath(); ex.moveTo(EW/2, SEC_APX);
+  ex.arc(EW/2, SEC_APX, SEC_R, SEC_A0, SEC_A1, false); ex.closePath();
+}
+function echoBG(tint='#0c1410'){
+  ex.fillStyle='#000'; ex.fillRect(0,0,EW,EH);
+  ex.save(); sectorMask(); ex.clip();
+  const g=ex.createRadialGradient(EW/2,30,10,EW/2,30,EH);
+  g.addColorStop(0,tint); g.addColorStop(1,'#050806');
+  ex.fillStyle=g; ex.fillRect(0,0,EW,EH);
+  ex.restore();
+}
+function speckle(alpha=0.05){
+  ex.save(); sectorMask(); ex.clip(); ex.globalAlpha=alpha;
+  for(let i=0;i<160;i++){
+    const a=SEC_A1+Math.random()*(SEC_A0-SEC_A1), r=20+Math.random()*SEC_R;
+    const x=EW/2+Math.cos(a)*r, y=SEC_APX+Math.sin(a)*r;
+    ex.fillStyle=Math.random()>.5?'#bfe9d2':'#16241b';
+    ex.fillRect(x,y,1.4,1.4);
+  }
+  ex.restore();
+}
+function blob(cx,cy,rx,ry,fill,label,rot=0){
+  ex.save(); ex.translate(cx,cy); ex.rotate(rot);
+  ex.beginPath(); ex.ellipse(0,0,rx,ry,0,0,Math.PI*2);
+  ex.fillStyle=fill; ex.fill(); ex.restore();
+  if(label){ ex.fillStyle='#d9ffe9'; ex.font='10px Segoe UI'; ex.textAlign='center'; ex.fillText(label,cx,cy+3); }
+}
+function ringArc(cx,cy,r,col,w=6,a0=0,a1=Math.PI*2){ ex.beginPath(); ex.arc(cx,cy,r,a0,a1); ex.strokeStyle=col; ex.lineWidth=w; ex.stroke(); }
+
+function drawEcho(t){
+  const v=ORGANS[cur];
+  const cx=EW/2, cy=112;
+  const wall='#7fbf9a', cav='#0a140e', bright='#bfe9c8', vesselDark='#06100a';
+  ex.textAlign='center';
+  switch(v.echo){
+    case 'liver':{
+      echoBG('#12190f'); speckle(.06);
+      ex.save(); sectorMask(); ex.clip();
+      // parenchyma fill
+      blob(cx,cy+10,120,150,'rgba(80,140,95,.35)');
+      // portal vessels (bright walls)
+      ex.strokeStyle='#cfeede'; ex.lineWidth=2;
+      ex.beginPath(); ex.moveTo(cx-60,cy-10); ex.quadraticCurveTo(cx,cy+10,cx+50,cy+30); ex.stroke();
+      ex.beginPath(); ex.moveTo(cx-30,cy+40); ex.lineTo(cx+40,cy-20); ex.stroke();
+      // gallbladder — anechoic with distal enhancement
+      blob(cx+44,cy+18,26,34,cav,'');
+      ex.fillStyle='rgba(180,255,210,.18)'; ex.fillRect(cx+20,cy+50,48,60); // enhancement
+      ex.fillStyle='#bcd6ff'; ex.font='10px Segoe UI'; ex.fillText('GB',cx+44,cy+20);
+      ex.restore();
+      break;
+    }
+    case 'spleen':{
+      echoBG('#1a160f'); speckle(.09);
+      ex.save(); sectorMask(); ex.clip();
+      blob(cx,cy,150,70,'rgba(150,120,70,.5)','');
+      ex.fillStyle='#ffe9c0'; ex.font='10px Segoe UI'; ex.fillText('SPLEEN · אחיד',cx,cy);
+      ex.restore();
+      break;
+    }
+    case 'kidney':{
+      echoBG('#10160f'); speckle(.05);
+      ex.save(); sectorMask(); ex.clip();
+      const beat=(Math.sin(t*4)+1)/2;
+      // capsule + cortex
+      blob(cx,cy,78,58,'rgba(120,150,110,.7)');
+      // medulla (darker) segments
+      for(let a=-1;a<=1;a+=1){ blob(cx+a*34,cy+6,18,30,'rgba(20,34,24,.85)'); }
+      // central sinus (bright)
+      blob(cx,cy,20,14,bright,'');
+      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI';
+      ex.fillText('cortex',cx-52,cy-30); ex.fillText('medulla',cx,cy+40); ex.fillText('pelvis',cx,cy+2);
+      ex.restore();
+      break;
+    }
+    case 'adrenal':{
+      echoBG('#0e140f'); speckle(.05);
+      ex.save(); sectorMask(); ex.clip();
+      // great vessel (tube) as landmark
+      ex.save(); ex.translate(cx-30,cy); ex.rotate(.2);
+      ex.fillStyle=vesselDark; ex.fillRect(-12,-70,24,140); ex.restore();
+      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('Ao/CVC',cx-30,cy-60);
+      // peanut gland
+      blob(cx+28,cy-12,10,16,'rgba(90,110,90,.9)');
+      blob(cx+24,cy+12,9,15,'rgba(90,110,90,.9)','');
+      ex.fillStyle='#d9ffe9'; ex.fillText('adrenal',cx+40,cy);
+      ex.restore();
+      break;
+    }
+    case 'git':{
+      echoBG('#13140d'); speckle(.05);
+      ex.save(); sectorMask(); ex.clip();
+      // 5-layer wall in cross-section ("wagon wheel")
+      const layers=[['#1a2a1e',46],['#cfeede',40],['#26402c',34],['#cfeede',28],['#1a2a1e',22],['#0a140e',16]];
+      layers.forEach(([c,r])=>{ blob(cx,cy,r,r,c); });
+      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('5 layers',cx,cy-58);
+      // peristalsis hint
+      ex.restore();
+      break;
+    }
+    case 'pancreas':{
+      echoBG('#15170e'); speckle(.06);
+      ex.save(); sectorMask(); ex.clip();
+      // duodenum tube
+      ex.save(); ex.translate(cx+34,cy); ex.rotate(.3);
+      ex.fillStyle='rgba(40,60,44,.8)'; ex.fillRect(-16,-70,32,140);
+      ex.fillStyle=cav; ex.fillRect(-7,-70,14,140); ex.restore();
+      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('duodenum',cx+50,cy-50);
+      // pancreas lobular strip
+      blob(cx-6,cy,60,18,'rgba(150,130,90,.7)','');
+      ex.fillStyle='#ffe9c0'; ex.fillText('pancreas',cx-6,cy);
+      ex.restore();
+      break;
+    }
+    case 'colon':{
+      echoBG('#0e120c'); speckle(.04);
+      ex.save(); sectorMask(); ex.clip();
+      // thin near wall + bright gas interface + dirty shadow
+      ringArc(cx,cy-6,60,'#cfeede',4,Math.PI*0.15,Math.PI*0.85);
+      ex.fillStyle='rgba(160,200,170,.12)';
+      for(let i=0;i<7;i++){ ex.fillRect(cx-70+i*4, cy+30, 2, 90); } // dirty shadow streaks
+      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('gas + dirty shadow',cx,cy-44);
+      ex.restore();
+      break;
+    }
+    case 'ln':{
+      echoBG('#0f140f'); speckle(.05);
+      ex.save(); sectorMask(); ex.clip();
+      blob(cx,cy,150,80,'rgba(70,110,80,.25)');
+      // ovoid node
+      blob(cx,cy,30,16,'rgba(30,48,34,.92)','');
+      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('LN (ovoid)',cx,cy+30);
+      ex.restore();
+      break;
+    }
+    case 'bladder':{
+      echoBG('#0a0f14'); speckle(.03);
+      ex.save(); sectorMask(); ex.clip();
+      // anechoic lumen + thin wall + distal enhancement
+      blob(cx,cy-6,84,66,'#06121d');
+      ringArc(cx,cy-6,84,'#bcd6ff',2,0,Math.PI*2);
+      ex.fillStyle='rgba(180,210,255,.16)'; ex.fillRect(cx-70,cy+58,140,70);
+      // a calculus with shadow (gravity-dependent, bottom)
+      blob(cx+10,cy+44,9,7,'#eafff0','');
+      ex.fillStyle='rgba(0,0,0,.6)'; ex.fillRect(cx+3,cy+50,16,80);
+      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('lumen (anechoic)',cx,cy-6);
+      ex.restore();
+      break;
+    }
+    case 'prostate':{
+      echoBG('#120e12'); speckle(.05);
+      ex.save(); sectorMask(); ex.clip();
+      // bilobed symmetric
+      blob(cx-22,cy,30,34,'rgba(140,110,130,.7)');
+      blob(cx+22,cy,30,34,'rgba(140,110,130,.7)','');
+      ex.strokeStyle='#d9c0d0'; ex.lineWidth=1.5; ex.beginPath(); ex.moveTo(cx,cy-32); ex.lineTo(cx,cy+32); ex.stroke();
+      ex.fillStyle='#f0d9ea'; ex.font='9px Segoe UI'; ex.fillText('bilobed',cx,cy+48);
+      ex.restore();
+      break;
+    }
+    case 'vessels':{
+      echoBG('#0c0f14'); speckle(.04);
+      ex.save(); sectorMask(); ex.clip();
+      const resp=(Math.sin(t*1.4)+1)/2; // CVC collapses with respiration
+      const beat=(Math.sin(t*5)+1)/2;
+      // aorta (round, pulsatile)
+      blob(cx-30,cy,20+beat*3,20+beat*3,'#08131c'); ringArc(cx-30,cy,20+beat*3,'#ff9a90',2,0,Math.PI*2);
+      ex.fillStyle='#ffb0a0'; ex.font='9px Segoe UI'; ex.fillText('Ao',cx-30,cy+2);
+      // CVC (ovoid, collapsing)
+      blob(cx+32,cy,24,10+resp*10,'#0a1422'); ringArc(cx+32,cy,24,'#9ab8ff',2,0,Math.PI*2);
+      ex.fillStyle='#bcd6ff'; ex.fillText('CVC',cx+32,cy+2);
+      ex.restore();
+      break;
+    }
+  }
+  ex.restore();
+  // sector frame + depth ticks
+  ex.strokeStyle='#1f6b5e'; ex.lineWidth=1; sectorMask(); ex.stroke();
+  ex.fillStyle='#2a6b5e'; ex.font='8px monospace'; ex.textAlign='left';
+  for(let d=1;d<=4;d++) ex.fillText(d+'', 6, SEC_APX+d*(SEC_R/4));
+}
+
+/* =========================================================
+   8. TOGGLES
+   ========================================================= */
+let beamOn=true, xray=false;
+const bBeam=document.getElementById('btnBeam'), bX=document.getElementById('btnXray'),
+      bGhost=document.getElementById('btnGhost');
+bBeam.onclick=()=>{ beamOn=!beamOn; bBeam.classList.toggle('on',beamOn); beamGroup.visible=beamOn; };
+bX.onclick=()=>{ xray=!xray; bX.classList.toggle('on',xray); skelGroup.visible=xray; };
+bGhost.onclick=()=>{ ghostAll=!ghostAll; bGhost.classList.toggle('on',ghostAll); };
+
+/* =========================================================
+   9. QUIZ — "repeat the exam"
+   ========================================================= */
+const QUIZ = [
+  {q:'מהו סדר הבדיקה השיטתי המקובל בבטן הכלב?',
+   o:['אקראי, מה שנוח','שיטתי וקבוע (כבד→טחול→כליות→adrenals→GIT→שלפוחית→כלי דם)','רק האיבר החשוד','מהזנב לראש'],
+   a:1, fb:'נכון — בדיקה שיטתית וקבועה מבטיחה שלא מפספסים איבר. מתחילים קרניאלית (כבד) ומסיימים כודלית/בכלי הדם.'},
+  {q:'איזה איבר הוא ההיפר-אקואי (הבהיר) ביותר בבטן התקינה?',
+   o:['כבד','cortex של הכליה','טחול','שריר'],
+   a:2, fb:'נכון — סדר האקוגניות: טחול > כבד > cortex כליה. הטחול הוא ה"קו הבהיר" בבטן השמאלית.'},
+  {q:'מהו עובי הדופן התקין של שלפוחית שתן מלאה?',
+   o:['<1–2 מ״מ','5–7 מ״מ','1 ס״מ','לא ניתן למדידה'],
+   a:0, fb:'נכון — דופן <1–2 מ״מ במצב מלא. עיבוי קדמי-ונטרלי מחשיד cystitis, ומסה ב-trigone מחשידה TCC.'},
+  {q:'כיצד מבדילים את אבי העורקים מהווריד הנבוב הכודלי (CVC)?',
+   o:['לפי הצבע','אבי העורקים פועם ודופן עבה, CVC מתמוטט עם הנשימה','הם זהים','לפי הגודל בלבד'],
+   a:1, fb:'נכון — אבי העורקים עגול, פועם, דופן עבה; ה-CVC אליפסי ומתמוטט עם הנשימה (ומתרחב בגודש ימני).'},
+  {q:'איך מאתרים את בלוטות יותרת הכליה (adrenals)?',
+   o:['מתחת לשלפוחית','על-ידי מעקב אחר אבי העורקים וה-CVC, מדיאלית לכליות','בתוך הכבד','ליד הטחול'],
+   a:1, fb:'נכון — ה-adrenals שוכנות מדיאלית לכליות צמוד לכלי הדם הגדולים. עוקבים את האאורטה/CVC כ-landmark.'},
+  {q:'כמה שכבות מזהים בדופן מעי תקין, וכיצד נראה החתך הרוחבי?',
+   o:['3 שכבות, חתך משולש','5 שכבות, תבנית "גלגל" (wagon wheel)','שכבה אחת אחידה','7 שכבות'],
+   a:1, fb:'נכון — 5 שכבות מתחלפות; בחתך רוחבי מתקבלת תבנית "גלגל". אובדן שכבתיות מחשיד גידול/דלקת.'},
+  {q:'מהו עובי הקוטב הכודלי התקין של בלוטת יותרת הכליה בכלב?',
+   o:['<7.4 מ״מ','1.5 ס״מ','3 ס״מ','אין ערך ייחוס'],
+   a:0, fb:'נכון — עובי קוטב כודלי <7.4 מ״מ. הגדלה דו-צדדית מחשידה Cushing, ופלישה ל-CVC מחשידה ממאירות.'},
+  {q:'איזה ממצא בלבלב מחשיד pancreatitis חריף?',
+   o:['לבלב דק והיפר-אקואי','לבלב מעובה היפו-אקואי + שומן סובב היפר-אקואי + נוזל מקומי','כיס מרה מלא','כליה מוגדלת'],
+   a:1, fb:'נכון — בדלקת חריפה הלבלב מתעבה ומחשיך, השומן הסובב נעשה בהיר (היפר-אקואי), ולעיתים נוזל חופשי מקומי.'},
+];
+const quizEl=document.getElementById('quiz'), quizCard=document.getElementById('quizCard');
+document.getElementById('btnQuiz').onclick=openQuiz;
+function openQuiz(){
+  let answered=0, correct=0;
+  quizCard.innerHTML = `<h2>🎓 חזור על הבדיקה</h2>
+    <div class="qsub">ענה על ${QUIZ.length} השאלות כדי לוודא שאתה יכול לבצע בדיקת בטן מלאה בעצמך · Self-check before you scan</div>
+    <div id="qlist"></div>
+    <div class="score" id="qscore" style="display:none"></div>
+    <button class="close" id="qclose">סגור וחזור להדמיה</button>`;
+  const list=quizCard.querySelector('#qlist');
+  QUIZ.forEach((item,qi)=>{
+    const qd=document.createElement('div'); qd.className='q';
+    qd.innerHTML=`<div class="qt">${qi+1}. ${item.q}</div>`;
+    item.o.forEach((opt,oi)=>{
+      const b=document.createElement('button'); b.className='opt'; b.textContent=opt;
+      b.onclick=()=>{
+        if(qd.dataset.done) return; qd.dataset.done='1'; answered++;
+        if(oi===item.a){ b.classList.add('correct'); correct++; }
+        else { b.classList.add('wrong'); qd.querySelectorAll('.opt')[item.a].classList.add('correct'); }
+        const fb=qd.querySelector('.feedback'); fb.style.display='block'; fb.textContent=item.fb;
+        if(answered===QUIZ.length){
+          const sc=quizCard.querySelector('#qscore'); sc.style.display='block';
+          sc.innerHTML=`ציון: <b>${correct}/${QUIZ.length}</b> · ${correct===QUIZ.length?'מצוין! אתה מוכן לסרוק 🐾':'כדאי לחזור על האיברים שטעית בהם'}`;
+        }
+      };
+      qd.appendChild(b);
+    });
+    const fb=document.createElement('div'); fb.className='feedback'; qd.appendChild(fb);
+    list.appendChild(qd);
+  });
+  quizCard.querySelector('#qclose').onclick=()=>quizEl.style.display='none';
+  quizEl.style.display='flex';
+}
+
+/* =========================================================
+   10. RENDER LOOP
+   ========================================================= */
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  if(tween) tween(performance.now());
+
+  applyFade();
+
+  // LIVE exam feel — micro-fanning of the probe
+  if(!tween){
+    probe.rotation.z = probeBase.z + Math.sin(t*1.25)*0.02;
+    probe.rotation.x = probeBase.x + Math.sin(t*0.85+1.3)*0.015;
+    probe.position.y += Math.sin(t*2.1)*0.0006;
+  }
+  // beam scan-line sweep
+  if(beamOn){
+    const half=THREE.MathUtils.degToRad(SECTOR_DEG/2);
+    const a = Math.sin(t*3)*half;
+    scanLine.position.x = Math.sin(a)*SECTOR_LEN/2;
+    scanLine.rotation.z = a;
+    beamMat.opacity = 0.12 + 0.04*Math.sin(t*4);
+  }
+  // gentle breathing
+  bodyGroup.scale.y = 1 + Math.sin(t*0.6)*0.008;
+  organsRoot.position.y = Math.sin(t*0.6)*0.02;
+
+  controls.update();
+  renderer.render(scene, camera);
+  drawEcho(t);
+}
+
+/* init */
+setMode('full');
+goTo(0);
+animate();
+document.getElementById('load').style.display='none';
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+addEventListener('keydown',e=>{
+  if(mode==='single') return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown') goTo(cur+1);
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp') goTo(cur-1);
+});
+</script>
+</body>
+</html>
