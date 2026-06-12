@@ -174,6 +174,7 @@
       <button class="tbtn on" id="btnBeam">📡 קרן</button>
       <button class="tbtn" id="btnXray">🦴 שלד</button>
       <button class="tbtn on" id="btnPosture">🐕 שכיבה על הגב</button>
+      <button class="tbtn" id="btnManual">🕹️ סריקה ידנית</button>
       <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
       <button class="tbtn" id="btnCT">🩻 CT אמיתי</button>
       <button class="tbtn" id="btnQuiz">🎓 חזור על הבדיקה</button>
@@ -1273,6 +1274,47 @@ function setPosture(p){
 }
 bPosture.onclick=()=> setPosture(posture==='dorsal'?'lateral':'dorsal');
 
+/* ---- manual scan: drag the probe over the belly like a real exam ---- */
+const bManual=document.getElementById('btnManual');
+let manualMode=false, dragging=false;
+function nearestOrgan(x,z){
+  let best=0,bd=1e9;
+  ORGANS.forEach((o,i)=>{ const p=organData[o.id].pos;
+    const d=(p.x-x)**2 + (p.z-z)**2*1.4; if(d<bd){bd=d;best=i;} });
+  return best;
+}
+let manualTarget=null;
+function moveProbeTo(ndcX,ndcY){
+  // map screen → dog-local abdomen coords (cranial right = +X)
+  const lx = THREE.MathUtils.clamp(-1.5 + ndcX*4.0, -5.6, 2.6);
+  const lz = THREE.MathUtils.clamp(ndcY*2.6, -2.6, 2.6);
+  const idx=nearestOrgan(lx,lz);
+  // glide the probe to that organ's correct scan window (so the hand sits on the organ)
+  manualTarget=new THREE.Vector3(...ORGANS[idx].probePos);
+  if(idx!==cur){
+    cur=idx;
+    probeBase.set(ORGANS[idx].probeRot[0]+Math.PI, ORGANS[idx].probeRot[1], ORGANS[idx].probeRot[2]);
+    renderExplain();
+  }
+}
+function setManual(on){
+  manualMode=on; bManual.classList.toggle('on',on);
+  controls.enableRotate=!on;            // lock rotation while scanning (still zoomable)
+  tween=null; manualTarget=null;
+  bManual.textContent = on ? '🕹️ סריקה ידנית ✓' : '🕹️ סריקה ידנית';
+  if(on){
+    // wide whole-abdomen overview so the probe stays in frame as you scan
+    camera.position.set(-1.5, 7.5, 14.5);
+    controls.target.set(-1.5, 0.3, 0);
+  } else { goTo(cur); }
+}
+bManual.onclick=()=> setManual(!manualMode);
+canvas.addEventListener('pointerdown',e=>{ if(!manualMode)return; dragging=true;
+  moveProbeTo((e.clientX/innerWidth)*2-1, -((e.clientY/innerHeight)*2-1)); });
+canvas.addEventListener('pointermove',e=>{ if(!manualMode||!dragging)return;
+  moveProbeTo((e.clientX/innerWidth)*2-1, -((e.clientY/innerHeight)*2-1)); });
+addEventListener('pointerup',()=>{ dragging=false; });
+
 /* ---- Realistic CT anatomy (lazy-loaded GLB; segmented by tissue group) ---- */
 const bCT=document.getElementById('btnCT');
 let ctGroup=null, ctLoading=false, ctOn=false;
@@ -1412,6 +1454,8 @@ function animate(){
 
   applyFade();
 
+  // manual scan — glide the probe to the organ the user is dragging over
+  if(manualMode && manualTarget){ probe.position.lerp(manualTarget, 0.25); }
   // LIVE exam feel — micro-fanning of the probe
   if(!tween){
     probe.rotation.z = probeBase.z + Math.sin(t*1.25)*0.02;
