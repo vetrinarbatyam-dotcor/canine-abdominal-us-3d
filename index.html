@@ -1226,8 +1226,10 @@ const CT_STYLE={
   default_intestines:          {color:0xc9a36a, opacity:.85},
   default_vascular_liver_pancreas:{color:0x9e5b3e, opacity:.9} // liver / pancreas group
 };
-// transform that aligns the GLB into scene space (tuned empirically)
-const CT_TF={ s:5.4, rx:0, ry:0, rz:0, px:-1.4, py:-0.4, pz:0 };
+// transform that aligns the GLB into scene space (tuned empirically).
+// rz=π flips the model's native orientation to match scene axes
+// (+X cranial, +Y dorsal, +Z left): lungs→cranial, spine→dorsal, intestines→caudal/ventral.
+const CT_TF={ s:5.4, rx:0, ry:0, rz:Math.PI, px:-0.8, py:0.6, pz:0 };
 function applyCTtransform(){
   if(!ctGroup) return;
   ctGroup.scale.setScalar(CT_TF.s);
@@ -1247,6 +1249,7 @@ function loadCT(){
     g.scene.position.sub(c);
     g.scene.traverse(o=>{ if(o.isMesh){
       const mn=(o.material&&o.material.name)||'default';
+      o.userData.matName=mn;
       const st=CT_STYLE[mn]||{color:0xb08060,opacity:.85};
       o.material=new THREE.MeshStandardMaterial({color:st.color, roughness:.5, metalness:.05,
         transparent:true, opacity:st.opacity, side:THREE.DoubleSide, depthWrite:st.opacity>0.6});
@@ -1254,6 +1257,7 @@ function loadCT(){
     ctGroup.add(g.scene);
     applyCTtransform();
     dog.add(ctGroup);
+    window.__ctGroup=ctGroup; window.__ctInner=g.scene;
     ctLoading=false; document.getElementById('load').style.display='none';
     setCT(true);
   }, undefined, (e)=>{
