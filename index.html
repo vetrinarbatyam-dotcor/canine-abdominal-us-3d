@@ -146,6 +146,10 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   #load p{color:var(--dim);font-size:13px}
 
+  #ctCredit{position:absolute;left:14px;bottom:14px;z-index:14;display:none;
+    font-size:10px;color:var(--dim);background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:4px 9px;backdrop-filter:blur(8px)}
+  #ctCredit a{color:var(--accent2);text-decoration:none}
   @media(max-width:980px){
     #explain{width:300px;font-size:12px}
     #monitor{width:230px}
@@ -165,6 +169,7 @@
       <button class="tbtn on" id="btnBeam">📡 קרן</button>
       <button class="tbtn" id="btnXray">🦴 שלד</button>
       <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
+      <button class="tbtn" id="btnCT">🩻 CT אמיתי</button>
       <button class="tbtn" id="btnQuiz">🎓 חזור על הבדיקה</button>
     </div>
   </div>
@@ -206,6 +211,7 @@
   <div id="quiz"><div class="card" id="quizCard"></div></div>
 
   <div id="load"><div class="ring"></div><p>טוען מודל תלת-מימדי…</p></div>
+  <div id="ctCredit">מודל CT: <a href="https://sketchfab.com/3d-models/3d-canine-anatomy-normal-abdomen-962de878d2e94b75b10075931f0edaa3" target="_blank" rel="noopener">3D Canine Anatomy © Pixelbeaker</a> · CC-BY</div>
 </div>
 
 <script type="importmap">
@@ -218,6 +224,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /* =========================================================
    1. SCENE
@@ -1207,6 +1214,67 @@ const bBeam=document.getElementById('btnBeam'), bX=document.getElementById('btnX
 bBeam.onclick=()=>{ beamOn=!beamOn; bBeam.classList.toggle('on',beamOn); beamGroup.visible=beamOn; };
 bX.onclick=()=>{ xray=!xray; bX.classList.toggle('on',xray); skelGroup.visible=xray; };
 bGhost.onclick=()=>{ ghostAll=!ghostAll; bGhost.classList.toggle('on',ghostAll); };
+
+/* ---- Realistic CT anatomy (lazy-loaded GLB; segmented by tissue group) ---- */
+const bCT=document.getElementById('btnCT');
+let ctGroup=null, ctLoading=false, ctOn=false;
+// tissue styling per source material name (model is grouped into 5 tissue families)
+const CT_STYLE={
+  default_lungs:               {color:0xe79bb0, opacity:.40},
+  default:                     {color:0xe8ecf2, opacity:.30}, // skeleton
+  default_blood:               {color:0xc0392b, opacity:.92}, // vessels
+  default_intestines:          {color:0xc9a36a, opacity:.85},
+  default_vascular_liver_pancreas:{color:0x9e5b3e, opacity:.9} // liver / pancreas group
+};
+// transform that aligns the GLB into scene space (tuned empirically)
+const CT_TF={ s:5.4, rx:0, ry:0, rz:0, px:-1.4, py:-0.4, pz:0 };
+function applyCTtransform(){
+  if(!ctGroup) return;
+  ctGroup.scale.setScalar(CT_TF.s);
+  ctGroup.rotation.set(CT_TF.rx,CT_TF.ry,CT_TF.rz);
+  ctGroup.position.set(CT_TF.px,CT_TF.py,CT_TF.pz);
+}
+window.CT_TF=CT_TF; window.applyCTtransform=applyCTtransform; // expose for tuning
+function loadCT(){
+  if(ctGroup||ctLoading) return;
+  ctLoading=true; document.getElementById('load').style.display='flex';
+  document.querySelector('#load p').textContent='טוען מודל CT אמיתי (39MB)…';
+  new GLTFLoader().load('./dog-abdomen.glb',(g)=>{
+    ctGroup=new THREE.Group();
+    // center the loaded model on its own bbox so our transform is predictable
+    const box=new THREE.Box3().setFromObject(g.scene);
+    const c=box.getCenter(new THREE.Vector3());
+    g.scene.position.sub(c);
+    g.scene.traverse(o=>{ if(o.isMesh){
+      const mn=(o.material&&o.material.name)||'default';
+      const st=CT_STYLE[mn]||{color:0xb08060,opacity:.85};
+      o.material=new THREE.MeshStandardMaterial({color:st.color, roughness:.5, metalness:.05,
+        transparent:true, opacity:st.opacity, side:THREE.DoubleSide, depthWrite:st.opacity>0.6});
+    }});
+    ctGroup.add(g.scene);
+    applyCTtransform();
+    dog.add(ctGroup);
+    ctLoading=false; document.getElementById('load').style.display='none';
+    setCT(true);
+  }, undefined, (e)=>{
+    ctLoading=false; document.getElementById('load').style.display='none';
+    bCT.classList.remove('on'); alert('שגיאה בטעינת מודל ה-CT');
+  });
+}
+function setCT(on){
+  ctOn=on; bCT.classList.toggle('on',on);
+  if(ctGroup) ctGroup.visible=on;
+  // when CT anatomy is shown, hide the schematic organs/skeleton for a clean realistic view
+  organsRoot.visible=!on;
+  skelGroup.visible = on?false:xray;
+  // dim the glass body further so the dense CT reads clearly
+  glassMat.opacity = on?0.03:0.06;
+  document.getElementById('ctCredit').style.display = on?'block':'none';
+}
+bCT.onclick=()=>{
+  if(!ctGroup){ loadCT(); return; }
+  setCT(!ctOn);
+};
 
 /* =========================================================
    9. QUIZ — "repeat the exam"
