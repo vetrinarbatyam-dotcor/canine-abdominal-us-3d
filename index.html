@@ -230,6 +230,7 @@
     <div class="mhead">
       <span id="mTitle">2D US</span>
       <div style="display:flex;gap:6px;align-items:center">
+        <button id="xsToggle" class="ustog">🔪 חתך חי</button>
         <button id="usToggle" class="ustog">📷 אמיתי</button>
         <button id="pathoMon" class="ustog">🔬 פתולוגיה</button>
         <span class="live"><i></i>LIVE</span>
@@ -789,6 +790,13 @@ ORGANS.forEach(o=>{
   organsRoot.add(g);
 });
 
+// relative echogenicity (grayscale 0-255) for the live cross-section render
+const ECHO_GRAY={liver:112,spleen:150,lkidney:118,rkidney:118,adrenals:85,stomach:120,
+  pancreas:122,si:120,colon:132,ln:85,bladder:14,prostate:116,vessels:14};
+ORGANS.forEach(o=>{
+  organData[o.id].echoMat=new THREE.MeshBasicMaterial({color:new THREE.Color().setScalar((ECHO_GRAY[o.id]||110)/255)});
+});
+
 const PALE = new THREE.Color(0x4a5a72);   // washed-out tint for inactive organs
 function applyFade(){
   ORGANS.forEach((o,i)=>{
@@ -881,6 +889,16 @@ beamEdge.position.y=-.68; beamGroup.add(beamEdge);
 const scanLine = new THREE.Mesh(new THREE.PlaneGeometry(.03, SECTOR_LEN),
   new THREE.MeshBasicMaterial({color:0xfff4c0, transparent:true, opacity:.5, blending:THREE.AdditiveBlending}));
 scanLine.position.set(0,-.68-SECTOR_LEN/2,.001); beamGroup.add(scanLine);
+
+/* ---- scan camera for the LIVE CROSS-SECTION (renders the imaging-plane slab) ---- */
+// ortho camera as a child of the probe → automatically follows probe position/angle.
+// Captures local X (lateral) × Y (depth, face→deep), a thin slab around local z=0 (the imaging plane).
+const scanCam = new THREE.OrthographicCamera(-3.0, 3.0, 2.6, -2.6, 3.6, 4.4);
+scanCam.position.set(0, -3.0, 4.0);   // centered on the sector, in front of the plane
+probe.add(scanCam);
+const RTW=256, RTH=256;
+const scanRT = new THREE.WebGLRenderTarget(RTW, RTH);
+const scanBuf = new Uint8Array(RTW*RTH*4);
 
 /* =========================================================
    5. UI — explanation window (bilingual, 3 levels)
@@ -985,8 +1003,10 @@ function renderExplain(){
 
 /* ---- 2D US monitor: schematic / real-normal / pathology ---- */
 let usMode='schematic';   // 'schematic' | 'real' | 'patho'
+let xsMode=false;         // live cross-section overrides the canvas drawing
 let pIdx=0;
 const usToggle=document.getElementById('usToggle');
+const xsToggle=document.getElementById('xsToggle');
 const pathoMon=document.getElementById('pathoMon');
 const realMon=document.getElementById('realMon');
 const pathoNav=document.getElementById('pathoNav');
@@ -1023,7 +1043,15 @@ function updateMonitor(){
     realMon.style.display='none'; ec.style.display='block';
   }
 }
+function exitXS(){ xsMode=false; xsToggle.classList.remove('on'); }
+xsToggle.onclick=()=>{
+  xsMode=!xsMode; xsToggle.classList.toggle('on',xsMode);
+  if(xsMode){ usMode='schematic'; usToggle.classList.remove('on'); usToggle.textContent='📷 אמיתי';
+    pathoMon.classList.remove('on'); realMon.style.display='none'; ec.style.display='block'; }
+  updateMonitor();
+};
 usToggle.onclick=()=>{
+  exitXS();
   usMode = usMode==='real' ? 'schematic' : 'real';
   usToggle.textContent = usMode==='real' ? '🖥️ סכמטי' : '📷 אמיתי';
   usToggle.classList.toggle('on', usMode==='real');
@@ -1033,6 +1061,7 @@ usToggle.onclick=()=>{
 pathoMon.onclick=()=>{
   const list=(window.PATHOLOGIES&&window.PATHOLOGIES[ORGANS[cur].id])||[];
   if(!list.length) return;
+  exitXS();
   usMode = usMode==='patho' ? 'schematic' : 'patho'; pIdx=0;
   pathoMon.classList.toggle('on', usMode==='patho');
   usToggle.classList.remove('on'); usToggle.textContent='📷 אמיתי';
@@ -1353,6 +1382,44 @@ function drawEcho(t){
   ex.lineTo(APX_X+Math.sin(sa)*SEC_R, APX_Y+Math.cos(sa)*SEC_R); ex.stroke(); ex.restore();
 }
 
+/* LIVE CROSS-SECTION — render the imaging-plane slab through the 3D organs as a US image */
+function renderCrossSection(t){
+  // swap organs to flat echogenicity materials, render only organs to the RT
+  const swapped=[];
+  ORGANS.forEach(o=>{ const d=organData[o.id];
+    d.group.traverse(m=>{ if(m.isMesh){ swapped.push([m,m.material]); m.material=d.echoMat; } }); });
+  const prev=renderer.getRenderTarget();
+  renderer.setRenderTarget(scanRT);
+  renderer.setClearColor(0x000000,1); renderer.clear();
+  renderer.render(organsRoot, scanCam);
+  renderer.setRenderTarget(prev);
+  renderer.setClearColor(0x000000,0);
+  swapped.forEach(([m,mat])=>m.material=mat);
+  renderer.readRenderTargetPixels(scanRT,0,0,RTW,RTH,scanBuf);
+  // RT → temp canvas (flip Y)
+  if(!renderCrossSection._t){ const c=document.createElement('canvas'); c.width=RTW;c.height=RTH;
+    renderCrossSection._t=c; renderCrossSection._x=c.getContext('2d'); renderCrossSection._d=renderCrossSection._x.createImageData(RTW,RTH); }
+  const idd=renderCrossSection._d.data;
+  for(let y=0;y<RTH;y++){ const sy=RTH-1-y;
+    for(let x=0;x<RTW;x++){ const si=(sy*RTW+x)*4, di=(y*RTW+x)*4;
+      const g=scanBuf[si]; idd[di]=idd[di+1]=idd[di+2]=g; idd[di+3]=255; } }
+  renderCrossSection._x.putImageData(renderCrossSection._d,0,0);
+  // compose onto the echo canvas with US styling
+  ex.fillStyle='#000'; ex.fillRect(0,0,EW,EH);
+  ex.save(); sectorMask(); ex.clip();
+  ex.drawImage(renderCrossSection._t, APX_X-SEC_R*0.68, APX_Y, SEC_R*1.36, SEC_R);
+  ex.globalCompositeOperation='overlay'; ex.globalAlpha=.45;
+  ex.drawImage(speckleFrames[Math.floor(t*8)%NSP],0,0);
+  ex.restore();
+  ex.strokeStyle='rgba(120,160,140,.5)'; ex.lineWidth=1; sectorMask(); ex.stroke();
+  // depth ruler
+  ex.strokeStyle='rgba(150,180,160,.5)'; ex.fillStyle='rgba(150,180,160,.7)'; ex.font='8px monospace'; ex.textAlign='left';
+  for(let dd=1;dd<=DEPTH_CM;dd++){ const y=cmY(dd); ex.beginPath(); ex.moveTo(EW-10,y); ex.lineTo(EW-4,y); ex.stroke(); ex.fillText(dd,EW-9,y-2); }
+  ex.fillStyle='rgba(180,210,190,.8)'; ex.font='9px monospace'; ex.textAlign='left'; ex.fillText('C8-5  XPLANE',6,12);
+  ex.textAlign='right'; ex.fillText('LIVE CUT',EW-4,12);
+  document.getElementById('echoCap').textContent=ORGANS[cur].name+' · 🔪 חתך חי (מנח הפרוב)';
+}
+
 /* =========================================================
    8. TOGGLES
    ========================================================= */
@@ -1613,7 +1680,7 @@ function animate(){
 
   controls.update();
   renderer.render(scene, camera);
-  drawEcho(t);
+  if(xsMode) renderCrossSection(t); else drawEcho(t);
 }
 
 /* init */
