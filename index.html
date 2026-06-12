@@ -39,7 +39,7 @@
   #modes .mode.on{background:var(--accent2);color:#04122e;font-weight:700}
 
   /* ===== Right: explanation window ===== */
-  #explain{position:absolute;top:66px;right:14px;width:362px;max-height:calc(100% - 210px);
+  #explain{position:absolute;top:66px;right:14px;width:362px;max-height:calc(100% - 396px);
     background:var(--panel);border:1px solid var(--line);border-radius:16px;
     padding:16px 16px 14px;z-index:15;backdrop-filter:blur(14px);overflow-y:auto;
     box-shadow:0 18px 50px rgba(0,0,0,.45)}
@@ -85,7 +85,7 @@
   #organMenu .oi .nn{font-size:10px;color:var(--dim);background:#0b1326;border-radius:5px;padding:1px 6px}
 
   /* ===== 2D echo monitor ===== */
-  #monitor{position:absolute;bottom:14px;right:14px;width:300px;z-index:15;
+  #monitor{position:absolute;bottom:14px;right:14px;width:272px;z-index:15;
     background:var(--panel-solid);border:1px solid var(--line);border-radius:14px;
     padding:10px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
   #monitor .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
@@ -981,188 +981,221 @@ document.querySelectorAll('#modes .mode').forEach(el=> el.onclick=()=>setMode(el
    ========================================================= */
 const ec = document.getElementById('echoCanvas');
 const ex = ec.getContext('2d');
-const EW=280, EH=220;
-const SEC_A0=Math.PI*0.74, SEC_A1=Math.PI*0.26, SEC_R=EH-18, SEC_APX=6;
+const EW=300, EH=300; ec.width=EW; ec.height=EH;
+// --- sector geometry (apex top-center, fanning down) ---
+const APX_X=150, APX_Y=10, SEC_R=286, HALF=THREE.MathUtils.degToRad(33);
+const A0=Math.PI/2+HALF, A1=Math.PI/2-HALF;      // canvas angles (y-down) of the two edges
+const DEPTH_CM=6, PXCM=SEC_R/DEPTH_CM;            // 6 cm scan depth
 function sectorMask(){
-  ex.beginPath(); ex.moveTo(EW/2, SEC_APX);
-  ex.arc(EW/2, SEC_APX, SEC_R, SEC_A0, SEC_A1, false); ex.closePath();
+  ex.beginPath(); ex.moveTo(APX_X, APX_Y);
+  ex.arc(APX_X, APX_Y, SEC_R, A0, A1, true); ex.closePath();
 }
-function echoBG(tint='#0c1410'){
-  ex.fillStyle='#000'; ex.fillRect(0,0,EW,EH);
-  ex.save(); sectorMask(); ex.clip();
-  const g=ex.createRadialGradient(EW/2,30,10,EW/2,30,EH);
-  g.addColorStop(0,tint); g.addColorStop(1,'#050806');
-  ex.fillStyle=g; ex.fillRect(0,0,EW,EH);
-  ex.restore();
-}
-function speckle(alpha=0.05){
-  ex.save(); sectorMask(); ex.clip(); ex.globalAlpha=alpha;
-  for(let i=0;i<160;i++){
-    const a=SEC_A1+Math.random()*(SEC_A0-SEC_A1), r=20+Math.random()*SEC_R;
-    const x=EW/2+Math.cos(a)*r, y=SEC_APX+Math.sin(a)*r;
-    ex.fillStyle=Math.random()>.5?'#bfe9d2':'#16241b';
-    ex.fillRect(x,y,1.4,1.4);
+// depth(px from apex) -> y ; helper to place by cm
+function cmY(cm){ return APX_Y+cm*PXCM; }
+
+// ---- precompute speckle frames (grayscale tissue texture) ----
+const NSP=4, speckleFrames=[];
+(function buildSpeckle(){
+  for(let f=0;f<NSP;f++){
+    const c=document.createElement('canvas'); c.width=EW; c.height=EH;
+    const cx=c.getContext('2d'); const img=cx.createImageData(EW,EH); const d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      // correlated-ish noise: mostly mid, occasional bright/dark grain
+      let n=128 + (Math.random()-0.5)*150;
+      if(Math.random()>0.93) n=200+Math.random()*55;   // bright speckle
+      n=Math.max(40,Math.min(235,n));
+      d[i]=d[i+1]=d[i+2]=n; d[i+3]=255;
+    }
+    cx.putImageData(img,0,0); speckleFrames.push(c);
   }
-  ex.restore();
+})();
+
+const g=v=>`rgb(${v|0},${v|0},${v|0})`;
+function ellipse(cx,cy,rx,ry,fill,rot=0,alpha=1){
+  ex.save(); ex.globalAlpha=alpha; ex.translate(cx,cy); ex.rotate(rot);
+  ex.beginPath(); ex.ellipse(0,0,rx,ry,0,0,Math.PI*2); ex.fillStyle=fill; ex.fill(); ex.restore();
 }
-function blob(cx,cy,rx,ry,fill,label,rot=0){
+// semi-transparent soft tissue (speckle shows through) — parenchyma
+function soft(cx,cy,rx,ry,level,rot=0){ ellipse(cx,cy,rx,ry,g(level),rot,0.8); }
+// opaque region
+function solid(cx,cy,rx,ry,level,rot=0){ ellipse(cx,cy,rx,ry,g(level),rot,1); }
+// anechoic fluid (kills speckle, near-black) + bright far wall
+function lumen(cx,cy,rx,ry,rot=0){
+  ellipse(cx,cy,rx,ry,g(8),rot,1);
   ex.save(); ex.translate(cx,cy); ex.rotate(rot);
-  ex.beginPath(); ex.ellipse(0,0,rx,ry,0,0,Math.PI*2);
-  ex.fillStyle=fill; ex.fill(); ex.restore();
-  if(label){ ex.fillStyle='#d9ffe9'; ex.font='10px Segoe UI'; ex.textAlign='center'; ex.fillText(label,cx,cy+3); }
+  ex.beginPath(); ex.ellipse(0,0,rx,ry,0,0.25*Math.PI,0.75*Math.PI); // far (bottom) wall bright
+  ex.strokeStyle=g(225); ex.lineWidth=2.4; ex.stroke(); ex.restore();
 }
-function ringArc(cx,cy,r,col,w=6,a0=0,a1=Math.PI*2){ ex.beginPath(); ex.arc(cx,cy,r,a0,a1); ex.strokeStyle=col; ex.lineWidth=w; ex.stroke(); }
+function capsule(cx,cy,rx,ry,level=215,rot=0,w=1.6){
+  ex.save(); ex.translate(cx,cy); ex.rotate(rot);
+  ex.beginPath(); ex.ellipse(0,0,rx,ry,0,0,Math.PI*2); ex.strokeStyle=g(level); ex.lineWidth=w; ex.stroke(); ex.restore();
+}
+// posterior acoustic SHADOW or ENHANCEMENT — diverges along rays from apex
+function column(cxTop,topY,halfTop,kind){
+  const scale=(APX_Y+SEC_R-APX_Y)/(topY-APX_Y);
+  const xLt=cxTop-halfTop, xRt=cxTop+halfTop, botY=APX_Y+SEC_R;
+  const xLb=APX_X+(xLt-APX_X)*scale, xRb=APX_X+(xRt-APX_X)*scale;
+  ex.save();
+  const grad=ex.createLinearGradient(0,topY,0,botY);
+  if(kind==='shadow'){ grad.addColorStop(0,'rgba(0,0,0,0)'); grad.addColorStop(.25,'rgba(0,0,0,.78)'); grad.addColorStop(1,'rgba(0,0,0,.92)'); }
+  else { grad.addColorStop(0,'rgba(255,255,255,0)'); grad.addColorStop(.4,'rgba(220,220,220,.16)'); grad.addColorStop(1,'rgba(230,230,230,.26)'); }
+  ex.fillStyle=grad;
+  ex.beginPath(); ex.moveTo(xLt,topY); ex.lineTo(xRt,topY); ex.lineTo(xRb,botY); ex.lineTo(xLb,botY); ex.closePath();
+  ex.globalCompositeOperation = kind==='shadow'?'source-over':'lighter';
+  ex.fill(); ex.restore();
+}
+function bright(cx,cy,w,h,level=245,rot=0){ ellipse(cx,cy,w,h,g(level),rot,1); }
+function lbl(txt,x,y,lx,ly){
+  if(lx!==undefined){ ex.strokeStyle='rgba(180,255,210,.6)'; ex.lineWidth=1;
+    ex.beginPath(); ex.moveTo(lx,ly); ex.lineTo(x,y); ex.stroke();
+    ex.fillStyle='#bdffd6'; ex.beginPath(); ex.arc(lx,ly,1.8,0,7); ex.fill(); }
+  ex.fillStyle='#d9ffe9'; ex.font='10px Segoe UI'; ex.textAlign='left'; ex.fillText(txt,x,y);
+}
 
 function drawEcho(t){
   const v=ORGANS[cur];
-  const cx=EW/2, cy=112;
-  const wall='#7fbf9a', cav='#0a140e', bright='#bfe9c8', vesselDark='#06100a';
-  ex.textAlign='center';
+  // background gradient (TGC: brighter mid-field, darker near & far)
+  ex.fillStyle='#000'; ex.fillRect(0,0,EW,EH);
+  ex.save(); sectorMask(); ex.clip();
+  const bg=ex.createLinearGradient(0,APX_Y,0,APX_Y+SEC_R);
+  bg.addColorStop(0,'#0a0a0a'); bg.addColorStop(.18,'#1c1c1c'); bg.addColorStop(.55,'#242424'); bg.addColorStop(1,'#0c0c0c');
+  ex.fillStyle=bg; ex.fillRect(0,0,EW,EH);
+  // tissue speckle base
+  ex.save(); ex.globalAlpha=.55; ex.globalCompositeOperation='overlay';
+  ex.drawImage(speckleFrames[Math.floor(t*8)%NSP],0,0); ex.restore();
+
+  const cx=APX_X, midY=cmY(2.8);
   switch(v.echo){
     case 'liver':{
-      echoBG('#12190f'); speckle(.06);
-      ex.save(); sectorMask(); ex.clip();
-      // parenchyma fill
-      blob(cx,cy+10,120,150,'rgba(80,140,95,.35)');
-      // portal vessels (bright walls)
-      ex.strokeStyle='#cfeede'; ex.lineWidth=2;
-      ex.beginPath(); ex.moveTo(cx-60,cy-10); ex.quadraticCurveTo(cx,cy+10,cx+50,cy+30); ex.stroke();
-      ex.beginPath(); ex.moveTo(cx-30,cy+40); ex.lineTo(cx+40,cy-20); ex.stroke();
-      // gallbladder — anechoic with distal enhancement
-      blob(cx+44,cy+18,26,34,cav,'');
-      ex.fillStyle='rgba(180,255,210,.18)'; ex.fillRect(cx+20,cy+50,48,60); // enhancement
-      ex.fillStyle='#bcd6ff'; ex.font='10px Segoe UI'; ex.fillText('GB',cx+44,cy+20);
-      ex.restore();
+      soft(cx,midY+18,150,150,108);                                   // parenchyma
+      // hepatic/portal vessels (portal = bright walls)
+      ex.strokeStyle=g(30); ex.lineWidth=9; ex.beginPath();
+      ex.moveTo(cx-70,midY-8); ex.quadraticCurveTo(cx,midY+8,cx+60,midY+34); ex.stroke();
+      ex.strokeStyle=g(210); ex.lineWidth=1.4; ex.beginPath();
+      ex.moveTo(cx-70,midY-8); ex.quadraticCurveTo(cx,midY+8,cx+60,midY+34); ex.stroke();
+      ex.strokeStyle=g(28); ex.lineWidth=6; ex.beginPath(); ex.moveTo(cx-34,midY+48); ex.lineTo(cx+46,midY-22); ex.stroke();
+      // gallbladder — anechoic + posterior enhancement
+      lumen(cx+52,midY+8,26,34); column(cx+52,midY+40,22,'enhance');
+      // diaphragm bright line (far field)
+      ex.strokeStyle=g(215); ex.lineWidth=2; ex.beginPath();
+      ex.moveTo(cx-90,cmY(5.2)); ex.quadraticCurveTo(cx,cmY(4.7),cx+90,cmY(5.2)); ex.stroke();
+      lbl('Liver',cx-96,midY-30,cx-50,midY); lbl('GB',cx+70,midY-6,cx+52,midY+8);
+      lbl('portal v.',cx-104,midY+30,cx-40,midY+6); lbl('diaphragm',cx+30,cmY(5.5),cx,cmY(4.8));
       break;
     }
     case 'spleen':{
-      echoBG('#1a160f'); speckle(.09);
-      ex.save(); sectorMask(); ex.clip();
-      blob(cx,cy,150,70,'rgba(150,120,70,.5)','');
-      ex.fillStyle='#ffe9c0'; ex.font='10px Segoe UI'; ex.fillText('SPLEEN · אחיד',cx,cy);
-      ex.restore();
+      soft(cx,midY,160,66,150);                                       // homogeneous, hyperechoic
+      capsule(cx,midY,160,66,225);
+      lbl('Spleen — fine, hyperechoic',cx-120,midY-44,cx,midY);
       break;
     }
     case 'kidney':{
-      echoBG('#10160f'); speckle(.05);
-      ex.save(); sectorMask(); ex.clip();
-      const beat=(Math.sin(t*4)+1)/2;
-      // capsule + cortex
-      blob(cx,cy,78,58,'rgba(120,150,110,.7)');
-      // medulla (darker) segments
-      for(let a=-1;a<=1;a+=1){ blob(cx+a*34,cy+6,18,30,'rgba(20,34,24,.85)'); }
-      // central sinus (bright)
-      blob(cx,cy,20,14,bright,'');
-      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI';
-      ex.fillText('cortex',cx-52,cy-30); ex.fillText('medulla',cx,cy+40); ex.fillText('pelvis',cx,cy+2);
-      ex.restore();
+      const ang=-0.15;
+      capsule(cx,midY,92,66,225,ang,2);                               // renal capsule (bright)
+      soft(cx,midY,90,64,118,ang);                                    // cortex
+      for(let k=-2;k<=2;k++){ solid(cx+k*30,midY+6,15,26,55,ang); }   // medullary pyramids (hypoechoic)
+      solid(cx,midY+2,30,18,190,ang);                                 // renal sinus (bright fat)
+      lbl('cortex',cx-118,midY-34,cx-60,midY-18);
+      lbl('medulla',cx+60,cmY(4.3),cx+30,midY+12);
+      lbl('sinus',cx+70,midY-6,cx,midY+2);
       break;
     }
     case 'adrenal':{
-      echoBG('#0e140f'); speckle(.05);
-      ex.save(); sectorMask(); ex.clip();
-      // great vessel (tube) as landmark
-      ex.save(); ex.translate(cx-30,cy); ex.rotate(.2);
-      ex.fillStyle=vesselDark; ex.fillRect(-12,-70,24,140); ex.restore();
-      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('Ao/CVC',cx-30,cy-60);
-      // peanut gland
-      blob(cx+28,cy-12,10,16,'rgba(90,110,90,.9)');
-      blob(cx+24,cy+12,9,15,'rgba(90,110,90,.9)','');
-      ex.fillStyle='#d9ffe9'; ex.fillText('adrenal',cx+40,cy);
-      ex.restore();
+      // great vessel as landmark (anechoic tube, pulsatile)
+      const beat=(Math.sin(t*5)+1)/2;
+      ex.save(); ex.translate(cx-34,midY); ex.rotate(.16);
+      lumen(0,0,16+beat*2,86); ex.restore();
+      // peanut-shaped gland (hypoechoic) next to it
+      solid(cx+24,midY-14,11,17,70); solid(cx+20,midY+12,10,15,70);
+      ex.strokeStyle=g(60); ex.lineWidth=7; ex.beginPath(); ex.moveTo(cx+22,midY-10); ex.lineTo(cx+18,midY+8); ex.stroke();
+      lbl('aorta',cx-120,midY-30,cx-34,midY); lbl('adrenal',cx+44,midY,cx+22,midY-2);
       break;
     }
     case 'git':{
-      echoBG('#13140d'); speckle(.05);
-      ex.save(); sectorMask(); ex.clip();
-      // 5-layer wall in cross-section ("wagon wheel")
-      const layers=[['#1a2a1e',46],['#cfeede',40],['#26402c',34],['#cfeede',28],['#1a2a1e',22],['#0a140e',16]];
-      layers.forEach(([c,r])=>{ blob(cx,cy,r,r,c); });
-      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('5 layers',cx,cy-58);
-      // peristalsis hint
-      ex.restore();
+      // cross-section: 5 alternating layers ("target")
+      const layers=[[52,52],[210,44],[70,38],[205,30],[60,22],[8,14]];
+      layers.forEach(([lv,r])=>solid(cx,midY,r,r,lv));
+      column(cx,midY+14,9,'shadow'); // central gas
+      lbl('5-layer wall',cx-118,midY-46,cx-30,midY-30);
+      lbl('mucosa',cx+60,midY+34,cx+18,midY+14);
       break;
     }
     case 'pancreas':{
-      echoBG('#15170e'); speckle(.06);
-      ex.save(); sectorMask(); ex.clip();
-      // duodenum tube
-      ex.save(); ex.translate(cx+34,cy); ex.rotate(.3);
-      ex.fillStyle='rgba(40,60,44,.8)'; ex.fillRect(-16,-70,32,140);
-      ex.fillStyle=cav; ex.fillRect(-7,-70,14,140); ex.restore();
-      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('duodenum',cx+50,cy-50);
-      // pancreas lobular strip
-      blob(cx-6,cy,60,18,'rgba(150,130,90,.7)','');
-      ex.fillStyle='#ffe9c0'; ex.fillText('pancreas',cx-6,cy);
-      ex.restore();
+      // duodenum (layered tube) as landmark
+      ex.save(); ex.translate(cx+40,midY); ex.rotate(.25);
+      solid(0,0,18,78,70); solid(0,0,9,78,12); ex.restore();
+      soft(cx-8,midY,66,20,120,0.05);                                 // lobular pancreas (iso/slightly hyper)
+      lbl('pancreas',cx-118,midY-26,cx-20,midY);
+      lbl('duodenum',cx+60,cmY(4.6),cx+40,midY+20);
       break;
     }
     case 'colon':{
-      echoBG('#0e120c'); speckle(.04);
-      ex.save(); sectorMask(); ex.clip();
-      // thin near wall + bright gas interface + dirty shadow
-      ringArc(cx,cy-6,60,'#cfeede',4,Math.PI*0.15,Math.PI*0.85);
-      ex.fillStyle='rgba(160,200,170,.12)';
-      for(let i=0;i<7;i++){ ex.fillRect(cx-70+i*4, cy+30, 2, 90); } // dirty shadow streaks
-      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('gas + dirty shadow',cx,cy-44);
-      ex.restore();
+      // bright curved gas interface + "dirty" posterior shadow
+      ex.strokeStyle=g(238); ex.lineWidth=4; ex.beginPath();
+      ex.arc(cx,midY+18,58,Math.PI*1.15,Math.PI*1.85,false); ex.stroke();
+      column(cx,midY,46,'shadow');
+      // dirty (reverberation) streaks within the shadow
+      ex.globalAlpha=.25; ex.fillStyle=g(150);
+      for(let i=0;i<9;i++) ex.fillRect(cx-58+i*14, midY+30, 2, 120);
+      ex.globalAlpha=1;
+      lbl('gas interface',cx-120,midY-40,cx,midY-40);
+      lbl('dirty shadow',cx+30,cmY(5),cx,midY+70);
       break;
     }
     case 'ln':{
-      echoBG('#0f140f'); speckle(.05);
-      ex.save(); sectorMask(); ex.clip();
-      blob(cx,cy,150,80,'rgba(70,110,80,.25)');
-      // ovoid node
-      blob(cx,cy,30,16,'rgba(30,48,34,.92)','');
-      ex.fillStyle='#d9ffe9'; ex.font='9px Segoe UI'; ex.fillText('LN (ovoid)',cx,cy+30);
-      ex.restore();
+      soft(cx,midY,150,70,120);                                       // mesenteric fat background
+      solid(cx,midY,32,15,72); capsule(cx,midY,32,15,150,0,1.2);      // ovoid hypoechoic node
+      lbl('jejunal LN (ovoid)',cx-120,midY+40,cx,midY);
       break;
     }
     case 'bladder':{
-      echoBG('#0a0f14'); speckle(.03);
-      ex.save(); sectorMask(); ex.clip();
-      // anechoic lumen + thin wall + distal enhancement
-      blob(cx,cy-6,84,66,'#06121d');
-      ringArc(cx,cy-6,84,'#bcd6ff',2,0,Math.PI*2);
-      ex.fillStyle='rgba(180,210,255,.16)'; ex.fillRect(cx-70,cy+58,140,70);
-      // a calculus with shadow (gravity-dependent, bottom)
-      blob(cx+10,cy+44,9,7,'#eafff0','');
-      ex.fillStyle='rgba(0,0,0,.6)'; ex.fillRect(cx+3,cy+50,16,80);
-      ex.fillStyle='#bcd6ff'; ex.font='9px Segoe UI'; ex.fillText('lumen (anechoic)',cx,cy-6);
-      ex.restore();
+      lumen(cx,midY+4,92,70);                                         // anechoic urine + bright far wall
+      capsule(cx,midY+4,92,70,150,0,1.4);                             // thin wall
+      column(cx,cmY(5.2),70,'enhance');                               // posterior enhancement
+      // gravity-dependent calculus with clean shadow
+      solid(cx+12,midY+52,9,7,245); column(cx+12,midY+58,9,'shadow');
+      lbl('urine (anechoic)',cx-120,midY-28,cx,midY);
+      lbl('calculus',cx+58,cmY(4.6),cx+12,midY+52);
+      lbl('enhancement',cx-30,cmY(5.6),cx,cmY(5.1));
       break;
     }
     case 'prostate':{
-      echoBG('#120e12'); speckle(.05);
-      ex.save(); sectorMask(); ex.clip();
-      // bilobed symmetric
-      blob(cx-22,cy,30,34,'rgba(140,110,130,.7)');
-      blob(cx+22,cy,30,34,'rgba(140,110,130,.7)','');
-      ex.strokeStyle='#d9c0d0'; ex.lineWidth=1.5; ex.beginPath(); ex.moveTo(cx,cy-32); ex.lineTo(cx,cy+32); ex.stroke();
-      ex.fillStyle='#f0d9ea'; ex.font='9px Segoe UI'; ex.fillText('bilobed',cx,cy+48);
-      ex.restore();
+      soft(cx-24,midY,30,34,120); soft(cx+24,midY,30,34,120);         // bilobed, symmetric
+      capsule(cx-24,midY,30,34,200); capsule(cx+24,midY,30,34,200);
+      ex.strokeStyle=g(40); ex.lineWidth=3; ex.beginPath(); ex.moveTo(cx,midY-34); ex.lineTo(cx,midY+34); ex.stroke();
+      lbl('prostate — bilobed',cx-120,midY-44,cx,midY);
       break;
     }
     case 'vessels':{
-      echoBG('#0c0f14'); speckle(.04);
-      ex.save(); sectorMask(); ex.clip();
-      const resp=(Math.sin(t*1.4)+1)/2; // CVC collapses with respiration
-      const beat=(Math.sin(t*5)+1)/2;
-      // aorta (round, pulsatile)
-      blob(cx-30,cy,20+beat*3,20+beat*3,'#08131c'); ringArc(cx-30,cy,20+beat*3,'#ff9a90',2,0,Math.PI*2);
-      ex.fillStyle='#ffb0a0'; ex.font='9px Segoe UI'; ex.fillText('Ao',cx-30,cy+2);
-      // CVC (ovoid, collapsing)
-      blob(cx+32,cy,24,10+resp*10,'#0a1422'); ringArc(cx+32,cy,24,'#9ab8ff',2,0,Math.PI*2);
-      ex.fillStyle='#bcd6ff'; ex.fillText('CVC',cx+32,cy+2);
-      ex.restore();
+      const resp=(Math.sin(t*1.4)+1)/2, beat=(Math.sin(t*5)+1)/2;
+      lumen(cx-30,midY,20+beat*3,20+beat*3); capsule(cx-30,midY,20+beat*3,20+beat*3,200,0,2); // aorta: round, thick wall, pulsatile
+      lumen(cx+34,midY,26,9+resp*11); capsule(cx+34,midY,26,9+resp*11,150,0,1.2);              // CVC: ovoid, collapsing
+      lbl('aorta (pulsatile)',cx-128,midY-30,cx-30,midY);
+      lbl('CVC (collapses)',cx+44,cmY(4.4),cx+34,midY);
       break;
     }
   }
-  ex.restore();
-  // sector frame + depth ticks
-  ex.strokeStyle='#1f6b5e'; ex.lineWidth=1; sectorMask(); ex.stroke();
-  ex.fillStyle='#2a6b5e'; ex.font='8px monospace'; ex.textAlign='left';
-  for(let d=1;d<=4;d++) ex.fillText(d+'', 6, SEC_APX+d*(SEC_R/4));
+  ex.restore(); // unclip
+
+  // sector outline
+  ex.strokeStyle='rgba(120,160,140,.5)'; ex.lineWidth=1; sectorMask(); ex.stroke();
+  // depth ruler (right edge, cm ticks)
+  ex.strokeStyle='rgba(150,180,160,.5)'; ex.fillStyle='rgba(150,180,160,.7)';
+  ex.font='8px monospace'; ex.textAlign='left'; ex.lineWidth=1;
+  for(let d=1;d<=DEPTH_CM;d++){ const y=cmY(d);
+    ex.beginPath(); ex.moveTo(EW-10,y); ex.lineTo(EW-4,y); ex.stroke(); ex.fillText(d,EW-9,y-2); }
+  // focal-zone marker (left, animated within mid field)
+  const fz=cmY(2.6+Math.sin(t*0.7)*0.15);
+  ex.fillStyle='#ffd24a'; ex.beginPath(); ex.moveTo(7,fz); ex.lineTo(13,fz-4); ex.lineTo(13,fz+4); ex.closePath(); ex.fill();
+  // header text (machine-style)
+  ex.fillStyle='rgba(180,210,190,.8)'; ex.font='9px monospace'; ex.textAlign='left';
+  ex.fillText('C8-5  ABD',6,12);
+  ex.textAlign='right'; ex.fillText('D 6.0cm  Gn 58  MI 0.8',EW-4,12);
+  // live scan-line sweep
+  const sa=(Math.sin(t*2.2))*HALF;
+  ex.save(); sectorMask(); ex.clip(); ex.globalAlpha=.12; ex.strokeStyle='#dfffe9'; ex.lineWidth=2;
+  ex.beginPath(); ex.moveTo(APX_X,APX_Y);
+  ex.lineTo(APX_X+Math.sin(sa)*SEC_R, APX_Y+Math.cos(sa)*SEC_R); ex.stroke(); ex.restore();
 }
 
 /* =========================================================
