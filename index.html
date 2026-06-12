@@ -65,6 +65,17 @@
     color:var(--dim);font-size:11px;text-align:center}
   #realUS img{width:100%;border-radius:8px;display:block}
 
+  /* structured-exam checklist */
+  .examwrap{margin:8px 0 4px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#0b1326}
+  .exbar{height:6px;background:#0e1730;border-radius:4px;overflow:hidden;margin-bottom:6px}
+  .exfill{height:100%;background:var(--accent);transition:.3s}
+  .exprog{font-size:11px;color:var(--accent2);margin-bottom:8px}
+  .exlist{display:flex;flex-direction:column;gap:5px}
+  .exit{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:var(--txt);cursor:pointer;line-height:1.4}
+  .exit input{margin-top:2px;accent-color:var(--accent)}
+  .exit.done span{color:var(--good);text-decoration:line-through;opacity:.8}
+  .exbtn{margin-top:9px;width:100%;background:var(--accent);color:#04221e;border:none;border-radius:9px;padding:8px;font-size:13px;font-weight:700;cursor:pointer}
+
   /* level toggle */
   .levels{display:flex;gap:5px;margin:4px 0 8px}
   .lvl{flex:1;text-align:center;font-size:11px;padding:5px 0;border:1px solid var(--line);
@@ -212,6 +223,7 @@
   <div id="modes">
     <div class="mode on" data-mode="full">🔄 בדיקה מלאה</div>
     <div class="mode" data-mode="single">🎯 תרגול אבר</div>
+    <div class="mode" data-mode="exam">📋 מובנית</div>
     <div class="mode" data-mode="demo">▶ הדגמה</div>
   </div>
 
@@ -936,6 +948,57 @@ const FELINE = {
   vessels:{meas:'CVC מתמוטט עם נשימה = תקין · <b>בדוק התפצלות אאורטה</b> — saddle thrombus שכיח בחתול',
     note:'Aortic (saddle) thrombus — סיבוך שכיח של קרדיומיופתיה (HCM) בחתול. לבדוק את trifurcation האאורטה.', dz:['Saddle thrombus (HCM)','CVC distension']},
 };
+
+/* structured-exam checklist — the systematic steps for each organ */
+const CHECKLIST = {
+  liver:['סרוק את כל אונות הכבד','זהה את כיס המרה והערך דופן','עקוב אחר כלי דם portal/hepatic','הערך אקוגניות ושוליים'],
+  spleen:['עקוב מהראש לזנב','הערך אחידות הפרנכימה','מדוד עובי'],
+  lkidney:['חתך אורכי + רוחבי','הבחן cortex מ-medulla','מדוד אורך','בדוק pelvis (הידרונפרוזיס?)'],
+  rkidney:['אתר מתחת לצלעות (צמוד לכבד)','מדוד והשווה לכליה השמאלית','בדוק pelvis'],
+  adrenals:['עקוב אחר אבי העורקים / CVC','אתר את הבלוטה מדיאלית לכליה','מדוד עובי קוטב כודלי'],
+  stomach:['זהה קפלי rugae','הערך 5 שכבות ועובי דופן','בדוק פריסטלטיקה'],
+  pancreas:['אתר תריסריון ועקוב מדיאלית','הערך עובי ושומן סובב'],
+  si:['סרוק לולאה-לולאה','ספור 5 שכבות ומדוד דופן','הערך קוטר ופריסטלטיקה'],
+  colon:['זהה לפי גז וקוטר','הערך עובי דופן'],
+  ln:['סרוק את שורש המזנטריום','הערך גודל וצורה (אליפסי/עגול)'],
+  bladder:['חתך אורכי + רוחבי','הערך עובי ואחידות דופן','חפש אבנים (תלוי-כובד)','בדוק את ה-trigone'],
+  prostate:['זכר: הערך גודל וסימטריה','נקבה: חפש הרחבת רחם (pyometra)'],
+  vessels:['זהה אאורטה (פועם) מול CVC (מתמוטט)','בחתול — בדוק trifurcation (saddle thrombus)'],
+};
+let examState = {};   // organId -> array of booleans
+function examTotals(){ let done=0,tot=0;
+  ORGANS.forEach(o=>{ const items=CHECKLIST[o.id]||[]; tot+=items.length;
+    const st=examState[o.id]||[]; done+=st.filter(Boolean).length; });
+  return {done,tot};
+}
+function examBlock(v){
+  const items=CHECKLIST[v.id]||[];
+  if(!examState[v.id]) examState[v.id]=items.map(()=>false);
+  const st=examState[v.id]; const {done,tot}=examTotals(); const pct=tot?Math.round(done/tot*100):0;
+  return `<div class="examwrap">
+    <div class="exbar"><div class="exfill" style="width:${pct}%"></div></div>
+    <div class="exprog">צ'קליסט בדיקה · התקדמות כללית ${done}/${tot} (${pct}%)</div>
+    <div class="exlist">${items.map((it,i)=>`<label class="exit ${st[i]?'done':''}"><input type="checkbox" data-i="${i}" ${st[i]?'checked':''}/> <span>${it}</span></label>`).join('')}</div>
+    <button class="exbtn" id="examReport">📋 סיים והצג ציון</button>
+  </div>`;
+}
+function showExamReport(){
+  const {done,tot}=examTotals(); const pct=tot?Math.round(done/tot*100):0;
+  const rows=ORGANS.map(o=>{ const items=CHECKLIST[o.id]||[]; const st=examState[o.id]||[];
+    const d=st.filter(Boolean).length; const full=d===items.length&&items.length>0;
+    return `<div class="q" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;margin:5px 0">
+      <span>${full?'✅':d>0?'🟡':'⬜'} ${o.he}</span><span style="color:var(--dim)">${d}/${items.length}</span></div>`;}).join('');
+  const verdict = pct===100?'מצוין! בדיקה שיטתית ומלאה 🐾' : pct>=70?'כיסוי טוב — השלם את הפריטים החסרים' : 'המשך — עדיין חסרים אברים/מטלות';
+  quizCard.innerHTML=`<h2>📋 ציון בדיקה מובנית</h2>
+    <div class="qsub">השלמת ${done} מתוך ${tot} מטלות (${pct}%)</div>
+    <div class="score" style="margin:0 0 14px">${verdict}</div>
+    ${rows}
+    <button class="close" id="erClose">סגור</button>
+    <button class="close" id="erReset" style="background:#0e1730;color:var(--txt);margin-top:8px">איפוס בדיקה</button>`;
+  quizCard.querySelector('#erClose').onclick=()=>quizEl.style.display='none';
+  quizCard.querySelector('#erReset').onclick=()=>{ examState={}; quizEl.style.display='none'; renderExplain(); };
+  quizEl.style.display='flex';
+}
 const explainEl = document.getElementById('explain');
 
 function renderExplain(){
@@ -948,6 +1011,7 @@ function renderExplain(){
     <span class="pill">${species==='cat'?'🐱 חתול':'🐕 כלב'} · ${mode==='single'?'תרגול אבר':'שלב'} ${cur+1} / ${ORGANS.length}</span>
     <h2>🔎 ${v.he}</h2>
     <div class="en">${v.name}</div>
+    ${mode==='exam'?examBlock(v):''}
 
     <div class="levels">
       <div class="lvl ${level==='beg'?'on':''}" data-lvl="beg">מתחיל</div>
@@ -989,6 +1053,10 @@ function renderExplain(){
   explainEl.querySelectorAll('.lvl').forEach(el=>{
     el.onclick = ()=>{ level = el.dataset.lvl; renderExplain(); };
   });
+  explainEl.querySelectorAll('.exit input').forEach(cb=>{
+    cb.onchange=()=>{ examState[ORGANS[cur].id][+cb.dataset.i]=cb.checked; renderExplain(); };
+  });
+  const erb=explainEl.querySelector('#examReport'); if(erb) erb.onclick=showExamReport;
   document.getElementById('oPos').innerHTML = `<b>חלון:</b> ${v.site.split(',')[0]}`;
   document.getElementById('oMark').innerHTML = `${v.mark}`;
   document.getElementById('oPlane').innerHTML = `<b>מישור:</b> ${v.plane}`;
