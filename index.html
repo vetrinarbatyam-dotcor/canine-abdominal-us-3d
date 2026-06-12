@@ -143,6 +143,28 @@
   #quiz .close{margin-top:16px;width:100%;background:var(--accent);color:#04221e;border:none;
     border-radius:11px;padding:12px;font-size:15px;font-weight:700;cursor:pointer}
 
+  /* pathology modal */
+  #patho{position:absolute;inset:0;background:rgba(5,8,16,.93);z-index:45;display:none;
+    align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)}
+  #patho .card{width:min(960px,96vw);max-height:92vh;overflow-y:auto;background:var(--panel-solid);
+    border:1px solid var(--line);border-radius:20px;padding:22px}
+  #patho h2{font-size:21px;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+  #patho .psub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  #patho .pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  #patho .pcard{background:#0b1224;border:1px solid var(--line);border-radius:13px;overflow:hidden}
+  #patho .pcard img{width:100%;display:block;background:#000;border-bottom:1px solid var(--line);cursor:zoom-in}
+  #patho .pcard .pname{font-size:13.5px;font-weight:700;color:var(--warn);padding:9px 11px 3px}
+  #patho .pcard .pdet{font-size:11.5px;color:var(--dim);line-height:1.5;padding:0 11px 11px;direction:ltr;text-align:left}
+  #patho .pclose{position:sticky;bottom:0;margin-top:16px;width:100%;background:var(--accent);color:#04221e;
+    border:none;border-radius:11px;padding:12px;font-size:15px;font-weight:700;cursor:pointer}
+  #patho .pzoom{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
+  #patho .pzoom img{max-width:96vw;max-height:96vh}
+  @media(max-width:760px){ #patho .pgrid{grid-template-columns:1fr} }
+  .pathobtn{display:block;width:100%;margin-top:10px;background:rgba(255,107,107,.13);
+    border:1px solid rgba(255,107,107,.4);color:#ffd0d0;border-radius:10px;padding:10px;
+    font-size:13.5px;font-weight:700;cursor:pointer;transition:.13s}
+  .pathobtn:hover{background:rgba(255,107,107,.22)}
+
   /* loading */
   #load{position:absolute;inset:0;background:var(--bg);z-index:60;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:14px}
@@ -220,11 +242,13 @@
   </div>
 
   <div id="quiz"><div class="card" id="quizCard"></div></div>
+  <div id="patho"><div class="card" id="pathoCard"></div></div>
 
   <div id="load"><div class="ring"></div><p>טוען מודל תלת-מימדי…</p></div>
   <div id="ctCredit">מודל CT: <a href="https://sketchfab.com/3d-models/3d-canine-anatomy-normal-abdomen-962de878d2e94b75b10075931f0edaa3" target="_blank" rel="noopener">3D Canine Anatomy © Pixelbeaker</a> · CC-BY</div>
 </div>
 
+<script src="pathologies.js" onerror="window.PATHOLOGIES=null"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -897,9 +921,13 @@ function renderExplain(){
     <div class="sec">
       <h3><span class="ic">🩺</span> פתולוגיות נפוצות · Pathologies</h3>
       <div>${v.diseases.map(d=>`<span class="dz">${d}</span>`).join('')}</div>
-      <div id="realUS">משבצת לתמונת US אמיתית (יתווסף בהמשך)</div>
+      ${(window.PATHOLOGIES&&window.PATHOLOGIES[v.id])?
+        `<button class="pathobtn" id="pathoBtn">🔬 צפה בפתולוגיות אמיתיות (${window.PATHOLOGIES[v.id].length}) · US אמיתי</button>`:''}
+      <div id="realUS"></div>
     </div>
   `;
+  const pb=document.getElementById('pathoBtn');
+  if(pb) pb.onclick=()=>openPatho(ORGANS[cur].id, ORGANS[cur].he);
   explainEl.querySelectorAll('.lvl').forEach(el=>{
     el.onclick = ()=>{ level = el.dataset.lvl; renderExplain(); };
   });
@@ -1441,6 +1469,32 @@ function openQuiz(){
   });
   quizCard.querySelector('#qclose').onclick=()=>quizEl.style.display='none';
   quizEl.style.display='flex';
+}
+
+/* ---- pathology viewer (real US cases from the teaching deck) ---- */
+const pathoEl=document.getElementById('patho'), pathoCard=document.getElementById('pathoCard');
+function openPatho(id, heName){
+  const list=(window.PATHOLOGIES&&window.PATHOLOGIES[id])||[];
+  if(!list.length) return;
+  const cards=list.map(c=>`
+    <div class="pcard">
+      <img loading="lazy" src="path-us/${c.img}" alt="" onerror="this.parentElement.style.display='none'">
+      <div class="pname">${c.name}</div>
+      ${c.detail?`<div class="pdet">${c.detail}</div>`:''}
+    </div>`).join('');
+  pathoCard.innerHTML=`
+    <h2>🔬 פתולוגיות · ${heName}</h2>
+    <div class="psub">${list.length} מקרים אמיתיים מתוך ספריית ההוראה · לחץ על תמונה להגדלה</div>
+    <div class="pgrid">${cards}</div>
+    <button class="pclose" id="pathoClose">סגור</button>
+    <div class="pzoom" id="pzoom"><img alt=""></div>`;
+  pathoCard.querySelector('#pathoClose').onclick=()=>pathoEl.style.display='none';
+  const zoom=pathoCard.querySelector('#pzoom'), zimg=zoom.querySelector('img');
+  pathoCard.querySelectorAll('.pcard img').forEach(im=>{
+    im.onclick=()=>{ zimg.src=im.src; zoom.style.display='flex'; };
+  });
+  zoom.onclick=()=>zoom.style.display='none';
+  pathoEl.style.display='flex';
 }
 
 /* =========================================================
