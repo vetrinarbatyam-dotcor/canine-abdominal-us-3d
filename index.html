@@ -101,6 +101,11 @@
   .ustog:hover{border-color:var(--accent);color:var(--accent)}
   .ustog.on{background:var(--accent);color:#04221e;border-color:var(--accent);font-weight:700}
   #monitor .cap{font-size:10.5px;color:var(--dim);text-align:center;margin-top:5px;direction:ltr}
+  #pathoNav{display:none;align-items:center;justify-content:center;gap:8px;margin-top:6px}
+  #pathoNav button{background:#0e1730;border:1px solid var(--line);color:var(--txt);border-radius:7px;
+    width:26px;height:24px;cursor:pointer;font-size:14px}
+  #pathoNav button:hover{border-color:var(--accent);color:var(--accent)}
+  #pathoNav span{font-size:10.5px;color:var(--warn);flex:1;text-align:center;direction:ltr;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* ===== Bottom step navigator ===== */
   #nav{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:18;
@@ -223,14 +228,16 @@
   <div id="monitor">
     <div class="mhead">
       <span id="mTitle">2D US</span>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:6px;align-items:center">
         <button id="usToggle" class="ustog">📷 אמיתי</button>
+        <button id="pathoMon" class="ustog">🔬 פתולוגיה</button>
         <span class="live"><i></i>LIVE</span>
       </div>
     </div>
     <canvas id="echoCanvas" width="280" height="220"></canvas>
     <img id="realMon" alt="" />
     <div class="cap" id="echoCap"></div>
+    <div id="pathoNav"><button id="pmPrev">‹</button><span id="pmLabel"></span><button id="pmNext">›</button></div>
   </div>
 
   <div id="nav">
@@ -936,6 +943,7 @@ function renderExplain(){
   document.getElementById('oPlane').innerHTML = `<b>מישור:</b> ${v.plane}`;
   document.getElementById('mTitle').textContent = '2D US · '+v.id.toUpperCase();
   document.getElementById('echoCap').textContent = v.name;
+  pIdx=0;            // start each organ's pathology series from the first case
   updateMonitor();
   document.querySelectorAll('#dots .dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
   document.getElementById('stepLabel').textContent = `${cur+1}/${ORGANS.length}`;
@@ -943,30 +951,57 @@ function renderExplain(){
   document.querySelectorAll('#organMenu .oi').forEach((el,i)=>el.classList.toggle('on',i===cur));
 }
 
-/* ---- 2D US monitor: schematic ↔ real image toggle ---- */
-let usMode='schematic';
+/* ---- 2D US monitor: schematic / real-normal / pathology ---- */
+let usMode='schematic';   // 'schematic' | 'real' | 'patho'
+let pIdx=0;
 const usToggle=document.getElementById('usToggle');
+const pathoMon=document.getElementById('pathoMon');
 const realMon=document.getElementById('realMon');
+const pathoNav=document.getElementById('pathoNav');
+const pmLabel=document.getElementById('pmLabel');
+function showImg(src,cap,onErr){
+  const im=new Image();
+  im.onload=()=>{ realMon.src=src; realMon.style.display='block'; ec.style.display='none';
+    document.getElementById('echoCap').textContent=cap; };
+  im.onerror=onErr; im.src=src;
+}
 function updateMonitor(){
   const v=ORGANS[cur];
+  const list=(window.PATHOLOGIES&&window.PATHOLOGIES[v.id])||[];
+  pathoMon.style.display = list.length ? '' : 'none';   // only show 🔬 if organ has pathologies
+  pathoNav.style.display='none';
   if(usMode==='real'){
-    const src='real-us/'+v.id+'.jpeg';
-    const im=new Image();
-    im.onload=()=>{ realMon.src=src; realMon.style.display='block'; ec.style.display='none';
-      document.getElementById('echoCap').textContent=v.name+' · תמונת US אמיתית'; };
-    im.onerror=()=>{ realMon.style.display='none'; ec.style.display='block';
-      document.getElementById('echoCap').textContent=v.name+' · (אין תמונה אמיתית — מוצג סכמטי)'; };
-    im.src=src;
+    showImg('real-us/'+v.id+'.jpeg', v.name+' · תמונת US אמיתית',
+      ()=>{ realMon.style.display='none'; ec.style.display='block';
+        document.getElementById('echoCap').textContent=v.name+' · (אין תמונה אמיתית)'; });
+  } else if(usMode==='patho' && list.length){
+    pIdx=((pIdx%list.length)+list.length)%list.length;
+    const c=list[pIdx];
+    showImg('path-us/'+c.img, '🔬 '+c.name,
+      ()=>{ realMon.style.display='none'; ec.style.display='block'; });
+    pathoNav.style.display='flex';
+    pmLabel.textContent=`${pIdx+1}/${list.length} · ${c.name}`;
   } else {
     realMon.style.display='none'; ec.style.display='block';
   }
 }
 usToggle.onclick=()=>{
-  usMode = usMode==='schematic' ? 'real' : 'schematic';
+  usMode = usMode==='real' ? 'schematic' : 'real';
   usToggle.textContent = usMode==='real' ? '🖥️ סכמטי' : '📷 אמיתי';
   usToggle.classList.toggle('on', usMode==='real');
+  pathoMon.classList.remove('on');
   updateMonitor();
 };
+pathoMon.onclick=()=>{
+  const list=(window.PATHOLOGIES&&window.PATHOLOGIES[ORGANS[cur].id])||[];
+  if(!list.length) return;
+  usMode = usMode==='patho' ? 'schematic' : 'patho'; pIdx=0;
+  pathoMon.classList.toggle('on', usMode==='patho');
+  usToggle.classList.remove('on'); usToggle.textContent='📷 אמיתי';
+  updateMonitor();
+};
+document.getElementById('pmPrev').onclick=()=>{ pIdx--; updateMonitor(); };
+document.getElementById('pmNext').onclick=()=>{ pIdx++; updateMonitor(); };
 
 /* ---- bottom dots ---- */
 const dotsEl = document.getElementById('dots');
