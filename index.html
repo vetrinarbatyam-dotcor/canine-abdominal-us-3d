@@ -168,6 +168,7 @@
     <div class="toolbtns">
       <button class="tbtn on" id="btnBeam">📡 קרן</button>
       <button class="tbtn" id="btnXray">🦴 שלד</button>
+      <button class="tbtn on" id="btnPosture">🐕 שכיבה על הגב</button>
       <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
       <button class="tbtn" id="btnCT">🩻 CT אמיתי</button>
       <button class="tbtn" id="btnQuiz">🎓 חזור על הבדיקה</button>
@@ -358,7 +359,7 @@ function makeLabel(txt, color='#9fb0cc'){
   const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true, depthTest:false}));
   s.scale.set(2.6,.55,1); return s;
 }
-function addLabel(txt,color,x,y,z){ const s=makeLabel(txt,color); s.position.set(x,y,z); scene.add(s); }
+function addLabel(txt,color,x,y,z){ const s=makeLabel(txt,color); s.position.set(x,y,z); dog.add(s); }
 addLabel('Cranial ▸ (קרניאלי)','#7fa8e0',4.6,3.0,0);
 addLabel('◂ Caudal (כודלי)','#9fb0cc',-6.4,2.0,0);
 addLabel('Left (שמאל) ▸','#34d1bf',-2.0,0.6,4.4);
@@ -846,6 +847,7 @@ let cur = 0;
 let level = 'gen';        // beg | gen | adv
 let mode = 'full';        // full | single | demo
 let ghostAll = false;     // "show all organs" — disables fade
+let posture = 'dorsal';   // 'dorsal' = on its back (real exam) | 'lateral' = on its side
 const explainEl = document.getElementById('explain');
 
 function renderExplain(){
@@ -931,12 +933,21 @@ function goTo(i){
   const to = {p:new THREE.Vector3(...v.probePos),
               r:new THREE.Euler(v.probeRot[0]+Math.PI, v.probeRot[1], v.probeRot[2])};
   probeBase.copy(to.r);
-  // camera frames the organ from ventral-left so the working hand is visible
+  // frame the organ — use WORLD position so it works in any posture
   const od = organData[v.id].pos;
+  const wp = new THREE.Vector3(); organData[v.id].group.getWorldPosition(wp);
   const side = od.z >= 0 ? 1 : -1;
-  const camTo = new THREE.Vector3(od.x*0.6+1.5, -2.0, side*13.5 + (side>0?2:-2));
+  let camTo, tgtTo;
+  if(posture==='dorsal'){
+    // dog on its back, belly up — view from front-above, slightly to the side
+    camTo = new THREE.Vector3(wp.x*0.4+2.4, 6.0, side*9 + (side>0?2:-2));
+    tgtTo = new THREE.Vector3(wp.x, wp.y+0.4, wp.z*0.5);
+  } else {
+    camTo = new THREE.Vector3(wp.x*0.6+1.5, -2.0, side*13.5 + (side>0?2:-2));
+    tgtTo = new THREE.Vector3(wp.x, wp.y-0.2, wp.z*0.4);
+  }
   const camFrom = camera.position.clone();
-  const tgtTo = new THREE.Vector3(od.x, od.y-0.2, od.z*0.4), tgtFrom = controls.target.clone();
+  const tgtFrom = controls.target.clone();
   const t0 = performance.now(), dur=900;
   tween = (now)=>{
     let k = Math.min(1,(now-t0)/dur); k = k<.5? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
@@ -1215,6 +1226,18 @@ bBeam.onclick=()=>{ beamOn=!beamOn; bBeam.classList.toggle('on',beamOn); beamGro
 bX.onclick=()=>{ xray=!xray; bX.classList.toggle('on',xray); skelGroup.visible=xray; };
 bGhost.onclick=()=>{ ghostAll=!ghostAll; bGhost.classList.toggle('on',ghostAll); };
 
+/* ---- posture: dorsal recumbency (on the back, real-exam) vs lateral ---- */
+const bPosture=document.getElementById('btnPosture');
+function setPosture(p){
+  posture=p;
+  // π about the cranio-caudal (X) axis → belly faces up, probe approaches from above
+  dog.rotation.x = (p==='dorsal') ? Math.PI : 0;
+  bPosture.classList.toggle('on', p==='dorsal');
+  bPosture.textContent = p==='dorsal' ? '🐕 שכיבה על הגב' : '🐕 שכיבה על הצד';
+  goTo(cur); // re-frame camera for the new posture
+}
+bPosture.onclick=()=> setPosture(posture==='dorsal'?'lateral':'dorsal');
+
 /* ---- Realistic CT anatomy (lazy-loaded GLB; segmented by tissue group) ---- */
 const bCT=document.getElementById('btnCT');
 let ctGroup=null, ctLoading=false, ctOn=false;
@@ -1379,6 +1402,7 @@ function animate(){
 
 /* init */
 setMode('full');
+setPosture('dorsal');   // default to real-exam posture (on the back)
 goTo(0);
 animate();
 document.getElementById('load').style.display='none';
