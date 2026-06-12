@@ -200,6 +200,7 @@
     <div class="toolbtns">
       <button class="tbtn on" id="btnBeam">📡 קרן</button>
       <button class="tbtn" id="btnXray">🦴 שלד</button>
+      <button class="tbtn" id="btnSpecies">🐱 עבור לחתול</button>
       <button class="tbtn on" id="btnPosture">🐕 שכיבה על הגב</button>
       <button class="tbtn" id="btnManual">🕹️ סריקה ידנית</button>
       <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
@@ -889,13 +890,43 @@ let level = 'gen';        // beg | gen | adv
 let mode = 'full';        // full | single | demo
 let ghostAll = false;     // "show all organs" — disables fade
 let posture = 'dorsal';   // 'dorsal' = on its back (real exam) | 'lateral' = on its side
+let species = 'dog';      // 'dog' | 'cat'
+
+/* feline overrides — measurements, a clinical note, and feline-typical pathologies */
+const FELINE = {
+  liver:{meas:'<b>דופן כיס מרה</b> &lt;1 מ״מ · <b>CBD</b> &lt;4 מ״מ (גדול מהכלב) · ducts נראים תקין בחתול',
+    note:'כיס מרה דו-אונתי/עם מחיצה — שכיח ותקין בחתול. ליפידוזיס = כבד היפר-אקואי בולט. חלק מ-triaditis.', dz:['ליפידוזיס כבדי','כולנגיטיס / triaditis','לימפומה']},
+  spleen:{meas:'טחול קטן ודק יחסית · אקוגניות הומוגנית · לרוב לא חורג',
+    note:'הטחול קטן ופחות נגיש בחתול. Mast cell tumor טחולי שכיח בחתול.', dz:['Mast cell tumor (שכיח בחתול)','לימפומה']},
+  lkidney:{meas:'<b>אורך</b> 3.8–4.4 ס״מ (קטן מהכלב!) · cortex היפר-אקואי יחסית = <b>תקין</b> (שומן בטובולי)',
+    note:'בחתול ה-cortex בהיר יותר מהכלב באופן תקין, צורה עגולה, subcapsular fat. CKD נפוץ מאוד.', dz:['CKD (נפוץ מאוד)','לימפומה כלייתית','FIP']},
+  rkidney:{meas:'<b>אורך</b> 3.8–4.4 ס״מ (קטן מהכלב!) · cortex היפר-אקואי יחסית = <b>תקין</b>',
+    note:'זהה לכליה השמאלית. השוואת סימטריה בין הכליות. CKD נפוץ מאוד בחתול.', dz:['CKD','לימפומה כלייתית','FIP']},
+  adrenals:{meas:'<b>עובי</b> &lt;4–5 מ״מ (קטן מהכלב) · מינרליזציה דו-צדדית = ממצא אגבי <b>תקין</b> בחתול מבוגר',
+    note:'מינרליזציית אדרנל בחתול מבוגר לרוב תקינה/אגבית (בכלב — מחשידה).', dz:['היפר-אלדוסטרוניזם (Conn)','גידול אדרנל']},
+  stomach:{meas:'<b>עובי דופן</b> &lt;2.4 מ״מ (דק מהכלב) · 5 שכבות',
+    note:'דופן דק יותר בחתול.', dz:['לימפומה','triaditis']},
+  pancreas:{meas:'<b>עובי</b> &lt;1 ס״מ · <b>duct</b> &lt;1.3 מ״מ (נראה יותר בחתול — תקין)',
+    note:'הצינור הלבלבי נראה לרוב ותקין בחתול. פנקראטיטיס חתולי לרוב כרוני/עדין, חלק מ-triaditis.', dz:['פנקראטיטיס (כרוני, triaditis)','אדנוקרצינומה']},
+  si:{meas:'<b>עובי דופן</b> &lt;2.5–2.8 מ״מ · <b>muscularis בולט</b> = שכיח בחתול (תקין או small-cell lymphoma)',
+    note:'עיבוי muscularis מפושט בחתול → חשד ל-small cell lymphoma מול IBD.', dz:['Small cell lymphoma','IBD','גוף זר (פחות מהכלב)']},
+  colon:{meas:'<b>עובי דופן</b> &lt;1.5–2 מ״מ', note:'', dz:['לימפומה']},
+  ln:{meas:'jejunal LN · בחתול בריא לרוב לא בולט', note:'lymphadenopathy מזנטרי שכיח ב-FIP ובלימפומה בחתול.', dz:['לימפומה','FIP']},
+  bladder:{meas:'<b>עובי דופן</b> &lt;1.7 מ״מ (מלאה)', note:'FLUTD וחסימה אורטרלית שכיחים בחתול; אבני oxalate נפוצות.', dz:['FLUTD','אבנים (oxalate)','קריש דם']},
+  prostate:{meas:'בחתול: ערמונית קטנה ופחות בולטת · בנקבה — התמקדות ברחם', note:'פתולוגיית ערמונית נדירה בחתול; בנקבה מחפשים pyometra.', dz:['Pyometra (רחם)']},
+  vessels:{meas:'CVC מתמוטט עם נשימה = תקין · <b>בדוק התפצלות אאורטה</b> — saddle thrombus שכיח בחתול',
+    note:'Aortic (saddle) thrombus — סיבוך שכיח של קרדיומיופתיה (HCM) בחתול. לבדוק את trifurcation האאורטה.', dz:['Saddle thrombus (HCM)','CVC distension']},
+};
 const explainEl = document.getElementById('explain');
 
 function renderExplain(){
   const v = ORGANS[cur];
   const focusText = level==='beg'? v.focus_beg : level==='adv'? v.focus_adv : v.focus_gen;
+  const fel = (species==='cat' && FELINE[v.id]) ? FELINE[v.id] : null;
+  const measHtml = fel ? fel.meas : v.meas;
+  const dzList = fel ? v.diseases.concat(fel.dz) : v.diseases;
   explainEl.innerHTML = `
-    <span class="pill">${mode==='single'?'תרגול אבר':'שלב'} ${cur+1} / ${ORGANS.length}</span>
+    <span class="pill">${species==='cat'?'🐱 חתול':'🐕 כלב'} · ${mode==='single'?'תרגול אבר':'שלב'} ${cur+1} / ${ORGANS.length}</span>
     <h2>🔎 ${v.he}</h2>
     <div class="en">${v.name}</div>
 
@@ -921,13 +952,14 @@ function renderExplain(){
     </div>
 
     <div class="sec">
-      <h3><span class="ic">📐</span> מידות נורמליות · Measurements</h3>
-      <div class="meas">${v.meas}</div>
+      <h3><span class="ic">📐</span> מידות נורמליות · Measurements${fel?' <span style="color:var(--warn)">🐱</span>':''}</h3>
+      <div class="meas">${measHtml}</div>
+      ${fel&&fel.note?`<div class="meas" style="margin-top:6px;background:rgba(255,180,84,.1);border-color:rgba(255,180,84,.3)"><b style="color:var(--warn)">🐱 ייחוד פליני:</b> ${fel.note}</div>`:''}
     </div>
 
     <div class="sec">
       <h3><span class="ic">🩺</span> פתולוגיות נפוצות · Pathologies</h3>
-      <div>${v.diseases.map(d=>`<span class="dz">${d}</span>`).join('')}</div>
+      <div>${dzList.map(d=>`<span class="dz">${d}</span>`).join('')}</div>
       ${(window.PATHOLOGIES&&window.PATHOLOGIES[v.id])?
         `<button class="pathobtn" id="pathoBtn">🔬 צפה בפתולוגיות אמיתיות (${window.PATHOLOGIES[v.id].length}) · US אמיתי</button>`:''}
       <div id="realUS"></div>
@@ -971,9 +1003,15 @@ function updateMonitor(){
   pathoMon.style.display = list.length ? '' : 'none';   // only show 🔬 if organ has pathologies
   pathoNav.style.display='none';
   if(usMode==='real'){
-    showImg('real-us/'+v.id+'.jpeg', v.name+' · תמונת US אמיתית',
-      ()=>{ realMon.style.display='none'; ec.style.display='block';
-        document.getElementById('echoCap').textContent=v.name+' · (אין תמונה אמיתית)'; });
+    const dogSrc='real-us/'+v.id+'.jpeg';
+    const toSchem=()=>{ realMon.style.display='none'; ec.style.display='block';
+      document.getElementById('echoCap').textContent=v.name+' · (אין תמונה אמיתית)'; };
+    if(species==='cat'){
+      showImg('real-us-cat/'+v.id+'.jpeg', v.name+' · 🐱 US חתול',
+        ()=> showImg(dogSrc, v.name+' · US (כלב — אין פליני)', toSchem));   // fall back to dog image
+    } else {
+      showImg(dogSrc, v.name+' · תמונת US אמיתית', toSchem);
+    }
   } else if(usMode==='patho' && list.length){
     pIdx=((pIdx%list.length)+list.length)%list.length;
     const c=list[pIdx];
@@ -1336,6 +1374,16 @@ function setPosture(p){
   goTo(cur); // re-frame camera for the new posture
 }
 bPosture.onclick=()=> setPosture(posture==='dorsal'?'lateral':'dorsal');
+
+/* ---- species toggle: dog ↔ cat (feline content + feline US images) ---- */
+const bSpecies=document.getElementById('btnSpecies');
+function setSpecies(s){
+  species=s;
+  bSpecies.classList.toggle('on', s==='cat');
+  bSpecies.textContent = s==='cat' ? '🐕 עבור לכלב' : '🐱 עבור לחתול';
+  renderExplain();   // refreshes content + monitor (feline measurements/notes/images)
+}
+bSpecies.onclick=()=> setSpecies(species==='cat'?'dog':'cat');
 
 /* ---- manual scan: drag the probe over the belly like a real exam ---- */
 const bManual=document.getElementById('btnManual');
