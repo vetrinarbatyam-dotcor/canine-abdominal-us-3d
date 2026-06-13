@@ -289,6 +289,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 /* =========================================================
    1. SCENE
@@ -1685,7 +1686,8 @@ function loadCT(){
   if(ctGroup||ctLoading) return;
   ctLoading=true; document.getElementById('load').style.display='flex';
   document.querySelector('#load p').textContent='טוען מודל CT אמיתי (39MB)…';
-  new GLTFLoader().load('./dog-abdomen.glb',(g)=>{
+  const ctLoader=new GLTFLoader(); ctLoader.setMeshoptDecoder(MeshoptDecoder);
+  ctLoader.load('./dog-abdomen.glb',(g)=>{
     ctGroup=new THREE.Group();
     // center the loaded model on its own bbox so our transform is predictable
     const box=new THREE.Box3().setFromObject(g.scene);
