@@ -30,6 +30,8 @@
     backdrop-filter:blur(8px);transition:.15s}
   .tbtn:hover{border-color:var(--accent);color:var(--accent)}
   .tbtn.on{background:var(--accent);color:#04221e;border-color:var(--accent);font-weight:700}
+  .tbtn.ic{width:36px;height:34px;padding:0;font-size:16px;display:inline-flex;align-items:center;justify-content:center}
+  .tsep{width:1px;height:22px;background:var(--line);align-self:center;margin:0 2px}
 
   /* ===== mode switch ===== */
   #modes{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:18;
@@ -209,14 +211,18 @@
       <h1>אולטרסאונד בטן בכלב <small>Canine Abdominal Ultrasound · 3D Trainer</small></h1>
     </div>
     <div class="toolbtns">
-      <button class="tbtn on" id="btnBeam">📡 קרן</button>
-      <button class="tbtn" id="btnXray">🦴 שלד</button>
-      <button class="tbtn" id="btnSpecies">🐱 עבור לחתול</button>
-      <button class="tbtn on" id="btnPosture">🐕 שכיבה על הגב</button>
-      <button class="tbtn" id="btnManual">🕹️ סריקה ידנית</button>
-      <button class="tbtn" id="btnGhost">👁️ כל האיברים</button>
-      <button class="tbtn" id="btnCT">🩻 CT אמיתי</button>
-      <button class="tbtn" id="btnQuiz">🎓 חזור על הבדיקה</button>
+      <button class="tbtn ic on" id="btnPosture" title="מנח: שכיבה על הגב / על הצד">🛏️</button>
+      <button class="tbtn ic" id="btnSpecies" title="מין: כלב ↔ חתול">🐱</button>
+      <span class="tsep"></span>
+      <button class="tbtn ic" id="btnManual" title="סריקה ידנית — גרור את הפרוב על הבטן">🕹️</button>
+      <button class="tbtn ic" id="btnAxis" title="ציר: ארוך / קצר (סיבוב הפרוב 90°)">📐</button>
+      <span class="tsep"></span>
+      <button class="tbtn ic" id="btnGhost" title="הצג את כל האיברים יחד">👁️</button>
+      <button class="tbtn ic" id="btnCT" title="מודל CT אמיתי">🩻</button>
+      <button class="tbtn ic" id="btnXray" title="שלד">🦴</button>
+      <button class="tbtn ic on" id="btnBeam" title="קרן הדמיה">📡</button>
+      <span class="tsep"></span>
+      <button class="tbtn ic" id="btnQuiz" title="חזור על הבדיקה (קוויז)">🎓</button>
     </div>
   </div>
 
@@ -246,6 +252,7 @@
         <button id="usToggle" class="ustog" title="תמונת US אמיתית">📷</button>
         <button id="pathoMon" class="ustog" title="פתולוגיות">🔬</button>
         <button id="calBtn" class="ustog" title="מדידה (calipers)">📏</button>
+        <button id="dopBtn" class="ustog" title="דופלר (color + spectral)">🩸</button>
         <span class="live"><i></i>LIVE</span>
       </div>
     </div>
@@ -922,6 +929,7 @@ let mode = 'full';        // full | single | demo
 let ghostAll = false;     // "show all organs" — disables fade
 let posture = 'dorsal';   // 'dorsal' = on its back (real exam) | 'lateral' = on its side
 let species = 'dog';      // 'dog' | 'cat'
+let axisRot = 0;          // 0 = long axis | π/2 = short axis (probe rotated 90° about the beam)
 
 /* feline overrides — measurements, a clinical note, and feline-typical pathologies */
 const FELINE = {
@@ -1073,6 +1081,7 @@ function renderExplain(){
 /* ---- 2D US monitor: schematic / real-normal / pathology ---- */
 let usMode='schematic';   // 'schematic' | 'real' | 'patho'
 let xsMode=false;         // live cross-section overrides the canvas drawing
+let dopplerOn=false;      // color + spectral Doppler overlay
 let pIdx=0;
 const usToggle=document.getElementById('usToggle');
 const xsToggle=document.getElementById('xsToggle');
@@ -1159,6 +1168,33 @@ calCanvas.addEventListener('pointerdown',e=>{
   if(calPts.length>=2) calPts=[];
   calPts.push({x,y});
 });
+const dopBtn=document.getElementById('dopBtn');
+dopBtn.onclick=()=>{ dopplerOn=!dopplerOn; dopBtn.classList.toggle('on',dopplerOn); };
+function drawDoppler(t){
+  const v=ORGANS[cur]; const cx=APX_X, cy=cmY(2.6);
+  ex.save(); sectorMask(); ex.clip();
+  ex.strokeStyle='#ffd24a'; ex.setLineDash([3,3]); ex.lineWidth=1; ex.strokeRect(cx-50,cy-42,100,84); ex.setLineDash([]);
+  const beat=(Math.sin(t*5)+1)/2;
+  ex.save(); ex.beginPath(); ex.rect(cx-50,cy-42,100,84); ex.clip(); ex.globalCompositeOperation='lighter';
+  for(let i=0;i<16;i++){ const x=cx-46+(i*27)%94, y=cy-34+Math.floor((i*27)/94)*20+(i%3)*7;
+    const toward=(i%2===0), a=0.22+0.4*beat*Math.abs(Math.sin(t*3+i));
+    ex.fillStyle=toward?`rgba(255,70,40,${a})`:`rgba(50,110,255,${a})`;
+    ex.beginPath(); ex.ellipse(x,y,8,6,0,0,7); ex.fill(); }
+  ex.restore();
+  // spectral strip
+  const sy0=EH-56, sh=44;
+  ex.fillStyle='rgba(0,0,0,.78)'; ex.fillRect(8,sy0,EW-16,sh);
+  ex.strokeStyle='#2a6b5e'; ex.lineWidth=1; ex.beginPath(); ex.moveTo(8,sy0+sh*0.62); ex.lineTo(EW-8,sy0+sh*0.62); ex.stroke();
+  const arterial=(v.id==='vessels'||v.id==='lkidney'||v.id==='rkidney'||v.id==='adrenals'||v.id==='liver');
+  ex.strokeStyle='#7dffb0'; ex.lineWidth=1.4; ex.beginPath();
+  for(let px=0;px<EW-16;px++){ const ph=(px/46+t*1.6)%1;
+    let amp = arterial ? (ph<0.5?Math.sin(ph*Math.PI)*(sh*0.5):Math.sin(ph*Math.PI)*(sh*0.12)) : (sh*0.22*(0.6+0.4*Math.sin(px/28+t)));
+    ex.lineTo(8+px, sy0+sh*0.62-amp); }
+  ex.stroke();
+  ex.fillStyle='#bcd6ff'; ex.font='9px monospace'; ex.textAlign='left'; ex.fillText(arterial?'PW · arterial':'PW · venous',12,sy0+11);
+  ex.restore();
+  document.getElementById('echoCap').textContent=v.name+' · 🩸 Doppler';
+}
 function drawCalipers(){
   if(!calMode || !calPts.length) return;
   ex.save(); ex.lineWidth=1.5;
@@ -1214,7 +1250,7 @@ function goTo(i){
   const from = {p:probe.position.clone(), r:probe.rotation.clone()};
   // flip the probe so its face/beam point UP into the ventral abdomen (probe approaches from below)
   const to = {p:new THREE.Vector3(...v.probePos),
-              r:new THREE.Euler(v.probeRot[0]+Math.PI, v.probeRot[1], v.probeRot[2])};
+              r:new THREE.Euler(v.probeRot[0]+Math.PI, v.probeRot[1]+axisRot, v.probeRot[2])};
   probeBase.copy(to.r);
   // frame the organ — use WORLD position so it works in any posture
   const od = organData[v.id].pos;
@@ -1554,7 +1590,7 @@ function setPosture(p){
   // π about the cranio-caudal (X) axis → belly faces up, probe approaches from above
   dog.rotation.x = (p==='dorsal') ? Math.PI : 0;
   bPosture.classList.toggle('on', p==='dorsal');
-  bPosture.textContent = p==='dorsal' ? '🐕 שכיבה על הגב' : '🐕 שכיבה על הצד';
+  bPosture.title = p==='dorsal' ? 'מנח: שכיבה על הגב (לחץ למנח צד)' : 'מנח: שכיבה על הצד (לחץ למנח גב)';
   goTo(cur); // re-frame camera for the new posture
 }
 bPosture.onclick=()=> setPosture(posture==='dorsal'?'lateral':'dorsal');
@@ -1564,10 +1600,23 @@ const bSpecies=document.getElementById('btnSpecies');
 function setSpecies(s){
   species=s;
   bSpecies.classList.toggle('on', s==='cat');
-  bSpecies.textContent = s==='cat' ? '🐕 עבור לכלב' : '🐱 עבור לחתול';
+  bSpecies.textContent = s==='cat' ? '🐶' : '🐱';
+  bSpecies.title = s==='cat' ? 'מין: חתול (לחץ לכלב)' : 'מין: כלב (לחץ לחתול)';
   renderExplain();   // refreshes content + monitor (feline measurements/notes/images)
 }
 bSpecies.onclick=()=> setSpecies(species==='cat'?'dog':'cat');
+
+/* ---- long-axis / short-axis: rotate the imaging plane 90° about the beam ---- */
+const bAxis=document.getElementById('btnAxis');
+function setAxis(short){
+  axisRot = short ? Math.PI/2 : 0;
+  bAxis.classList.toggle('on', short);
+  bAxis.title = short ? 'ציר קצר (transverse) — לחץ לציר ארוך' : 'ציר ארוך (long) — לחץ לציר קצר';
+  probeBase.y = ORGANS[cur].probeRot[1] + axisRot;
+  probe.rotation.y = probeBase.y;
+  document.getElementById('oPlane').innerHTML = `<b>מישור:</b> ${short?'ציר קצר · transverse':'ציר ארוך · long-axis'}`;
+}
+bAxis.onclick=()=> setAxis(axisRot===0);
 
 /* ---- manual scan: drag the probe over the belly like a real exam ---- */
 const bManual=document.getElementById('btnManual');
@@ -1588,7 +1637,7 @@ function moveProbeTo(ndcX,ndcY){
   manualTarget=new THREE.Vector3(...ORGANS[idx].probePos);
   if(idx!==cur){
     cur=idx;
-    probeBase.set(ORGANS[idx].probeRot[0]+Math.PI, ORGANS[idx].probeRot[1], ORGANS[idx].probeRot[2]);
+    probeBase.set(ORGANS[idx].probeRot[0]+Math.PI, ORGANS[idx].probeRot[1]+axisRot, ORGANS[idx].probeRot[2]);
     renderExplain();
   }
 }
@@ -1596,7 +1645,7 @@ function setManual(on){
   manualMode=on; bManual.classList.toggle('on',on);
   controls.enableRotate=!on;            // lock rotation while scanning (still zoomable)
   tween=null; manualTarget=null;
-  bManual.textContent = on ? '🕹️ סריקה ידנית ✓' : '🕹️ סריקה ידנית';
+  bManual.title = on ? 'סריקה ידנית פעילה — גרור את הפרוב' : 'סריקה ידנית — גרור את הפרוב על הבטן';
   if(on){
     // wide whole-abdomen overview so the probe stays in frame as you scan
     camera.position.set(-1.5, 7.5, 14.5);
@@ -1798,6 +1847,7 @@ function animate(){
   controls.update();
   renderer.render(scene, camera);
   if(xsMode) renderCrossSection(t); else drawEcho(t);
+  if(dopplerOn) drawDoppler(t);
   drawCalipers();
 }
 
